@@ -1,5 +1,5 @@
 # CPU Caches
-This is a repo for my work on the presentation I will be giving at JavaZone 2012.  To see the rendered presentation (sans images), go to [this page](https://github.com/jamie-allen/cpu_caches/blob/master/preso/presentation.md).
+This is a repo for my work on the presentation I will be presenting at Boundary on June 26, 2012.  To see the rendered presentation (sans images), go to [this page](https://github.com/jamie-allen/cpu_caches/blob/master/preso/presentation.md).
 
 A ShowOff presentation based on [Brian Clapper's](https://github.com/scala-phase/scala-orms/tree/master/ScalaQuery) presentation template.
 
