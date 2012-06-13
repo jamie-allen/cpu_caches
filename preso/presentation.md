@@ -24,7 +24,7 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # Memory Wall
-.notes Gil Tene, CTO of Azul has a good presentation about this concept from a paper in 1994 on their website.  Each Intel core has 6 execution units able to perform work during a cycle (loading memory, storing memory, arithmetic, branch logic, shifting, etc), but they need to be fed data very fast to take advantage of it. Note that it didn't happen because of RAM, but the Application Memory Wall does exist in other forms, like GC pauses.  (Martin: with an application designed for low GC, you can hit the memory wall; but for middle of the road applications, Gil's point holds true.)
+.notes Gil Tene, CTO of Azul has a good presentation about this concept from a paper in 1994 on their website.  Each Intel core has 6 execution units able to perform work during a cycle (loading memory, storing memory, arithmetic, branch logic, shifting, etc), but they need to be fed data very fast to take advantage of it. Note that it didn't happen because of RAM, but the Application Memory Wall does exist in other forms, like GC pauses - applications designed to minimize GC can hit the memory wall, but those are highly specialized.
 
 * CPUs are getting faster
 * Memory isn't, and bandwidth is increasing at a much slower rate
@@ -70,14 +70,14 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # CPU or Instruction Cycle 
-.notes sometimes called the fetch and execute cycle, or fetch-decode-execute cycle, or FDX.  Process by which a computer retrieves a program instruction from memory, determines what actions the instructions require, and carries out those actions.
+.notes Sometimes called the fetch and execute cycle, or fetch-decode-execute cycle, or FDX.  Process by which a computer retrieves a program instruction from memory, determines what actions the instructions require, and carries out those actions.
 
 * Basic operation cycle of a computer
 * Sandy Bridge has 2 load/store operations for each memory channel
 
 !SLIDE transition=blindY
 # Registers
-.notes single cycle = 1/3 of a NS.
+.notes Single cycle is roughly 1/3 of a NS.
 
 * On-core
 * Can be accessed in a single cycle
