@@ -304,6 +304,7 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 * Able to perform processing
 * Multistate, not binary
 
+!SLIDE transition=blindY
 # Phase Change Memory (PRAM)
 .notes Thermally-driven phase change, not an electronic process.  Faster because it doesn't need to erase a block of cells before writing.  Flash degrades at 5000 writes per sector, where PRAM lasts 100 million writes.  Some argue that PRAM should be considered a memristor as well.
 
