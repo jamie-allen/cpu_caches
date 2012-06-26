@@ -1,15 +1,15 @@
 !SLIDE title-page
 ## CPU Caches
+.notes More and more of our runtime environment is becoming virtual, but it is important as engineers for us to understand the low level details of hardware for our software to run optimally.  My goal is help everyone understand how each level of caching within a CPU works.  I've capped the talk below virtual memory (memory management for multitasking kernels), as that is specific to the operating system running on the machine.
 
 Jamie Allen
-
 Typesafe
 jamie.allen@typesafe.com
 @jamie_allen
 
 !SLIDE transition=blindY
 # Data Locality
-.notes All algorithms are dominated by that - you have to send data somewhere to have an operation performed on it, and then you have to send it back to where it can be used.  With spatial, what's important is that data which is required together is located together.  The JVM does not guarantee this for an object instance.
+.notes All algorithms are dominated by that - you have to send data somewhere to have an operation performed on it, and then you have to send it back to where it can be used.  With spatial, what's important is that data which is required together is located together.  The JVM does not guarantee this for object instances, such as fields in a class.
 
 * Spatial - reused over and over in a loop, data accessed in small regions
 * Temporal - high probability it will be reused before long
@@ -24,20 +24,12 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # Memory Wall
-.notes Gil Tene, CTO of Azul has a good presentation about this concept from a paper in 1994 on their website.  Each Intel core has 6 execution units able to perform work during a cycle (loading memory, storing memory, arithmetic, branch logic, shifting, etc), but they need to be fed data very fast to take advantage of it. Note that it didn't happen because of RAM, but the Application Memory Wall does exist in other forms, like GC pauses - applications designed to minimize GC can hit the memory wall, but those are highly specialized.
+.notes Gil Tene, CTO of Azul has a good presentation about this concept from a paper in 1994 on their website.  Each Intel core has 6 execution units able to perform work during a cycle (loading memory, storing memory, arithmetic, branch logic, shifting, etc), but they need to be fed data very fast to take advantage of it. Note that it didn't happen because of RAM, but the Application Memory Wall does exist in other forms, like GC pauses - applications designed to minimize GC can hit the memory wall, but those are highly specialized (like those using the Disruptor).
 
 * CPUs are getting faster
 * Memory isn't, and bandwidth is increasing at a much slower rate
 * It was predicted that applications would become memory-bound by now
 * Didn't happen
-
-!SLIDE transition=blindY
-# Memory Controller
-.notes Memory controller were moved onto the processor die by AMD beginning with their AMD64 processors and by Intel with their Nehalem processors.
-
-* Handles communication between the CPU and RAM
-* Contain the logic to read to and write from RAM
-* Integrated Memory Controller
 
 !SLIDE transition=blindY
 # Non-Uniform Memory Access (NUMA)
@@ -67,6 +59,13 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 	Send packet CA->Netherlands->CA .... 150,000,000 ns  = 150 ms
 
 	Shamelessly cribbed from this gist: https://gist.github.com/2843375
+
+!SLIDE transition=blindY
+# Current Intel Processors
+* Westmere
+* Nehalem
+* Sandy Bridge
+* Ivy Bridge - not on servers yet
 
 !SLIDE transition=blindY
 # Sandy Bridge Microarchitecture
@@ -100,21 +99,22 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 # SRAM
 .notes The number of circuits per datum means that SRAM can never be dense.
 
-* Requires 6-8 pieces of circuitry per datum
+* Requires 6-8 pieces of circuitry per datum, cannot be dense
 * Runs at a cycle rate, not quite measurable in time
+* Uses a relatively large amount of power for what it does
 * Data does not fade or leak, does not need to be refreshed/recharged
 
 !SLIDE transition=blindY
 # L0
-.notes Macro ops have to be decoded into micro ops to be handled by the CPU.  Nehalem used L1 for macro ops decoding, but Sandy Bridge caches the uops (Micro-operations), boosting performance in tight code.  Not the same as the older "trace" cache, which stored uops in the order in which they were executed, which means lots of potential duplication.  No duplication in the L0, storing only unique decode instructions.  
+.notes Macro ops have to be decoded into micro ops to be handled by the CPU.  Nehalem used L1 for macro ops decoding, but Sandy Bridge caches the uops (Micro-operations), boosting performance in tight code (small, highly profiled and optimized, can be secure, testable, easy to migrate).  Not the same as the older "trace" cache, which stored uops in the order in which they were executed, which means lots of potential duplication.  No duplication in the L0, storing only unique decode instructions.  Hot loops are those where the program spends the majority of its time.
 
-* A decoded cache of the last 1536 microinstructions (~6kB)
+* A decoded cache of the last 1536 uops (~6kB)
 * Well-suited for hot loops
 * When in use, the CPU puts the L1 and decoder to "sleep" to save energy and minimize heat.
 
 !SLIDE transition=blindY
 # L1
-.notes Instructions are generated by the compiler, which knows rules for good code generation.  Code has predictable patterns, & CPUs are good at recognizing them, helping pre-fetching.  And spatial and temporal locality is good.  Nehalem could load 128 bits per cycle, but Sandy Bridge can load double that because load and store address units can be interchanged - thus using 2 128-bit units per cycle instead of one.
+.notes Instructions are generated by the compiler, which knows rules for good code generation.  Code has predictable patterns and CPUs are good at recognizing them, which helps pre-fetching.  Spatial and temporal locality is good.  Nehalem could load 128 bits per cycle, but Sandy Bridge can load double that because load and store address units can be interchanged - thus using 2 128-bit units per cycle instead of one.
 
 * Divided into data and instructions
 * 32K data, 32K instructions per core on a Sandy Bridge
@@ -122,15 +122,26 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # Line Feed/Write Combining Buffers
-// TODO
+
+	TODO
 
 !SLIDE transition=blindY
 # L2
-.notes For random access, when the working set size is greater than the L2 size, cache misses start to grow.  Caches from L2 up are unified, having both instructions and data.
+.notes For random access, when the working set size is greater than the L2 size, cache misses start to grow.  Caches from L2 up are "unified", having both instructions and data (not in terms of shared across cores).
 
 * Bigger, 256K per core on a Sandy Bridge
 * 14 cycles
 * Unified from here up
+
+!SLIDE transition=blindY
+# L3
+.notes where concurrency takes place, data is passed between cores on a socket.  Current Intel top of the line is Xeon E7-8870 (32MB L3, 4TB RAM), but it's a Nehalem-based microarchitecture.  The E5 is the top shelf new Sandy Bridge offering, but it's specifications aren't as mighty (max 20MB L3, 1TB RAM).  Sandy Bridge is 4-30MB (8MB is currently max for mobile platforms, even with Ivy Bridge), includes the processor graphics.
+
+* Was a unified cache up until Sandy Bridge, shared between cores
+* Became known as the Last Level Cache (LLC)
+* Since no longer unified, any core can access data from any of the LLCs until Sandy Bridge
+* Sandy Bridge allows only exclusive access per core
+* Varies in size with different processors and versions of an architecture
 
 !SLIDE transition=blindY
 # Exclusive versus Inclusive
@@ -141,13 +152,12 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 * Intel is inclusive, requires larger L2
 
 !SLIDE transition=blindY
-# L3
-.notes where concurrency takes place, data is passed between cores on a socket.  Current Intel top of the line is Xeon E7-8870 (32MB L3, 4TB RAM), but it's a Nehalem-based microarchitecture.  The E5 is the top shelf new Sandy Bridge offering, but it's specifications aren't as mighty (max 20MB L3, 1TB RAM).  Sandy Bridge is 4-30MB (8MB is currently max for mobile platforms, even with Ivy Bridge), includes the processor graphics.
+# Memory Controller
+.notes Memory controllers were moved onto the processor die by AMD beginning with their AMD64 processors and by Intel with their Nehalem processors.
 
-* Was a unified cache up until Sandy Bridge, shared between cores
-* Became known as the Last Level Cache (LLC)
-* Since no longer unified, any core can access data from any of the LLCs
-* Varies in size with different processors and versions of an architecture
+* Handles communication between the CPU and RAM
+* Contain the logic to read to and write from RAM
+* Integrated Memory Controller
 
 !SLIDE transition=blindY
 # Intra-Socket Communication
@@ -160,7 +170,7 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # Inter-Socket Communication
-.notes GT/s is gigatransfers per seconds - how many times signals are sent per second.  Not a bus, but a point to point interface for connections between sockets in a NUMA platform, or from processors to I/O and peripheral controllers.  DDR = double data rate, two data transferred per clock cycle.  HT could theoretically be up to 32 bits per transmission, but hasn't been done that I know of yet.  HT can be used for more than linking processors - has applications in as well.    Processors "snoop" on each other, and certain actions are announced on external pins to make changes visible to others.  The address of the cache line is visible through the address bus.
+.notes GT/s is gigatransfers per seconds - how many times signals are sent per second.  Not a bus, but a point to point interface for connections between sockets in a NUMA platform, or from processors to I/O and peripheral controllers.  DDR = double data rate, two data transferred per clock cycle.  HT could theoretically be up to 32 bits per transmission, but hasn't been done yet that I know of.  HT can be used for more than linking processors - has applications in as well.    Processors "snoop" on each other, and certain actions are announced on external pins to make changes visible to others.  The address of the cache line is visible through the address bus.
 
 * Uses Quick Path Interconnect links (QPI, Intel) or HyperTransport (AMD) for:
 	* cache coherency across sockets
@@ -296,7 +306,7 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # Memristor
-.notes from HP, due to come out this year or next, may change memory fundamentally.  If the data and the function are together, you get the highest throughput and lowest latency possible.  Could replace DRAM and disk entirely.  When current flows in one direction through the device, the electrical resistance increases; and when current flows in the opposite direction, the resistance decreases.[1] When the current is stopped, the component retains the last resistance that it had, and when the flow of charge starts again, the resistance of the circuit will be what it was when it was last active.
+.notes from HP, due to come out this year or next, may change memory fundamentally.  If the data and the function are together, you get the highest throughput and lowest latency possible.  Could replace DRAM and disk entirely.  When current flows in one direction through the device, the electrical resistance increases; and when current flows in the opposite direction, the resistance decreases.  When the current is stopped, the component retains the last resistance that it had, and when the flow of charge starts again, the resistance of the circuit will be what it was when it was last active.
 
 * Non-volatile, static RAM, same write endurance as Flash (is that good enough for anything but storage?)
 * 200-300 MB on chip
