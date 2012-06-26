@@ -10,34 +10,15 @@ jamie.allen@typesafe.com
 
 <img src="typesafe-logo-081111.png" class="illustration" note="final slash needed"/>
 
-!SLIDE transition=blindY
-# Data Locality
-.notes All algorithms are dominated by that - you have to send data somewhere to have an operation performed on it, and then you have to send it back to where it can be used.  With spatial, what's important is that data which is required together is located together.  The JVM does not guarantee this for object instances, such as fields in a class.
-
-* Spatial - reused over and over in a loop, data accessed in small regions
-* Temporal - high probability it will be reused before long
 
 
 !SLIDE transition=blindY
-# The Old and Busted Architecture
-.notes Used to be that every socket had its own infrastructure that communicates with RAM via the frontside bus and northbridge.
+# Why?
 
-* Frontside Bus
-* Northbridge
-* Image by Alexander Taubenkorb, Wikimedia Commons
-
-<img src="300px-Schema_chipsatz.png" class="illustration" note="final slash needed"/>
-
-!SLIDE transition=blindY
-# The New Hotness Architecture
-.notes New machines today are SMP, a multiprocessor architecture where two or more identical processors are connected to a single shared main memory and controlled by a single OS instance.  Since Intel's Nehalem architecture, each CPU socket controls a portion of RAM, and no other socket has access to it directly.  2011 Sandy Bridge and AMD Fusion integrated Northbridge functions into CPUs, along with processor cores, memory controller and graphics processing unit. So components are closer together today than depicted in this picture.
-
-* Symmetric Multiprocessor (SMP)
-* No more Northbridge
-* Image by Khazadum, Wikimedia Commons
-
-<img src="smp.png" class="illustration" note="final slash needed"/>
-
+* Increased virtualization 
+	* Runtime (JVM, RVM)
+	* Platforms/Environments (cloud)
+* Disruptor, 2011
 
 !SLIDE transition=blindY
 # Memory Wall
@@ -49,12 +30,50 @@ jamie.allen@typesafe.com
 * Didn't happen
 
 !SLIDE transition=blindY
+# Current Processors
+.notes Westmere was the 32nm die shrink of Nehalem.  Ivy Bridge uses 22nm.  I'm ignoring Oracle SPARC here, but note that Oracle is supposedly building a 16K core UltraSPARC 64.  Current Intel top of the line is Xeon E7-8870 (80 cores, 32MB L3, 4TB RAM), but it's a Westmere-based microarchitecture.  The E5-2600 Romley is the top shelf new Sandy Bridge offering - it's specs don't sound as mighty (8 cores per socket, max 30MB L3, 1TB RAM).  Don't be fooled, the Direct Data IO makes up for it as disks network cards can do DMA (Direct Memory Access) from L3, not RAM.  Also has two memory read ports, whereas previous architectures only had one and were a bottleneck for math-intensive applications.  Sandy Bridge is 4-30MB (8MB is currently max for mobile platforms, even with Ivy Bridge), includes the processor graphics.  Sandy/Ivy Bridge and Bulldozer support the new AVX (Advanced Vector Extensions) instruction set of x86.
+
+* Intel
+	* Nehalem/Westmere
+	* Sandy Bridge
+	* Ivy Bridge - not on servers yet
+* AMD
+	* Bulldozer
+
+!SLIDE transition=blindY
+# Sandy Bridge Microarchitecture
+
+<img src="sb_microarch.png" class="illustration" note="final slash needed"/>
+
+!SLIDE transition=blindY
+# CPU Caches
+
+<img src="all_caches.png" class="illustration" note="final slash needed"/>
+
+!SLIDE transition=blindY
+# Symmetric Multiprocessor (SMP) Architecture
+.notes New machines today are SMP, a multiprocessor architecture where two or more identical processors are connected to a single shared main memory and controlled by a single OS instance.  Since Intel's Nehalem architecture, each CPU socket controls a portion of RAM, and no other socket has access to it directly.  2011 Sandy Bridge and AMD Fusion integrated Northbridge functions into CPUs, along with processor cores, memory controller and graphics processing unit. So components are closer together today than depicted in this picture.
+
+* Symmetric Multiprocessor
+* No more Northbridge
+
+<img src="smp.png" class="illustration" note="final slash needed"/>
+
+!SLIDE transition=blindY
 # Non-Uniform Memory Access (NUMA)
 .notes NUMA architectures have more trouble migrating processes across cores.  Initially, it has to look for a core with the same speed accessing memory resources and enough resources for the process.  If none are found, it then allows for degradation.  NUMA is not the same as multiple commodity machines because they don't have a shared address space.  Thread migration across sockets is extremely expensive because the shared L3 cache isn't warmed.
 
 * Access time is dependent on the memory locality to a processor
 * Memory local to a processor can be accessed faster than memory farther away
 * The organization of processors reflect the time to access data in RAM, called the NUMA factor.
+
+!SLIDE transition=blindY
+# Data Locality
+.notes All algorithms are dominated by that - you have to send data somewhere to have an operation performed on it, and then you have to send it back to where it can be used.  With spatial, what's important is that data which is required together is located together.  The JVM does not guarantee this for object instances, such as fields in a class.
+
+* The most critical factor in performance
+* Spatial - reused over and over in a loop, data accessed in small regions
+* Temporal - high probability it will be reused before long
 
 !SLIDE transition=blindY
 # Latency Numbers Everyone Should Know
@@ -76,22 +95,6 @@ jamie.allen@typesafe.com
 	Send packet CA->Netherlands->CA .... 150,000,000 ns  = 150 ms
 
 	Shamelessly cribbed from this gist: https://gist.github.com/2843375
-
-!SLIDE transition=blindY
-# Current Processors
-.notes Westmere was the 32nm die shrink of Nehalem.  Ivy Bridge uses 22nm.  I'm ignoring Oracle SPARC here, but note that Oracle is supposedly building a 16K core UltraSPARC 64.  Current Intel top of the line is Xeon E7-8870 (80 cores, 32MB L3, 4TB RAM), but it's a Westmere-based microarchitecture.  The E5-2600 Romley is the top shelf new Sandy Bridge offering - it's specs don't sound as mighty (8 cores per socket, max 30MB L3, 1TB RAM).  Don't be fooled, the Direct Data IO makes up for it as disks network cards can do DMA (Direct Memory Access) from L3, not RAM.  Also has two memory read ports, whereas previous architectures only had one and were a bottleneck for math-intensive applications.  Sandy Bridge is 4-30MB (8MB is currently max for mobile platforms, even with Ivy Bridge), includes the processor graphics.  Sandy/Ivy Bridge and Bulldozer support the new AVX (Advanced Vector Extensions) instruction set of x86.
-
-* Intel
-	* Nehalem/Westmere
-	* Sandy Bridge
-	* Ivy Bridge - not on servers yet
-* AMD
-	* Bulldozer
-
-!SLIDE transition=blindY
-# Sandy Bridge Microarchitecture
-
-<img src="sb_microarch.png" class="illustration" note="final slash needed"/>
 
 !SLIDE transition=blindY
 # CPU or Instruction Cycle 
@@ -122,6 +125,11 @@ jamie.allen@typesafe.com
 # Sandy Bridge PRF
 
 <img src="prf.jpg" class="illustration" note="final slash needed"/>
+
+!SLIDE transition=blindY
+# Associativity
+
+	TODO: http://en.wikipedia.org/wiki/CPU_cache
 
 !SLIDE transition=blindY
 # SRAM
