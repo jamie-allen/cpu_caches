@@ -1,11 +1,14 @@
 !SLIDE title-page
 ## CPU Caches
-.notes More and more of our runtime environment is becoming virtual, but it is important as engineers for us to understand the low level details of hardware for our software to run optimally.  My goal is help everyone understand how each level of caching within a CPU works.  I've capped the talk below virtual memory (memory management for multitasking kernels), as that is specific to the operating system running on the machine.
+.notes More and more of our runtime environment is becoming virtual, but it is important as engineers for us to understand the low level details of hardware for our software to run optimally.  My goal is help everyone understand how each physical level of caching within a CPU works.  I've capped the talk below virtual memory (memory management for multitasking kernels), as that is specific to the operating system running on the machine.
 
 Jamie Allen
-Typesafe
+
 jamie.allen@typesafe.com
+
 @jamie_allen
+
+<img src="typesafe-logo-081111.png" class="illustration" note="final slash needed"/>
 
 !SLIDE transition=blindY
 # Data Locality
@@ -14,13 +17,27 @@ jamie.allen@typesafe.com
 * Spatial - reused over and over in a loop, data accessed in small regions
 * Temporal - high probability it will be reused before long
 
+
 !SLIDE transition=blindY
-# Architecture
-.notes Many machines today are SMP, a multiprocessor architecture where two or more identical processors are connected to a single shared main memory and controlled by a single OS instance.  Used to be that every socket had its own infrastructure that communicates with RAM via the frontside bus and northbridge.  Since Intel's Nehalem architecture, each CPU socket controls a portion of RAM, and no other socket has access to it directly.  2011 Sandy Bridge and AMD Fusion integrated Northbridge functions into CPUs, along with processor cores, memory controller and graphics processing unit. So components are closer together today than depicted in this picture.
+# The Old and Busted Architecture
+.notes Used to be that every socket had its own infrastructure that communicates with RAM via the frontside bus and northbridge.
+
+* Frontside Bus
+* Northbridge
+* Image by Alexander Taubenkorb, Wikimedia Commons
 
 <img src="300px-Schema_chipsatz.png" class="illustration" note="final slash needed"/>
 
-Image by Alexander Taubenkorb, Wikimedia Commons
+!SLIDE transition=blindY
+# The New Hotness Architecture
+.notes New machines today are SMP, a multiprocessor architecture where two or more identical processors are connected to a single shared main memory and controlled by a single OS instance.  Since Intel's Nehalem architecture, each CPU socket controls a portion of RAM, and no other socket has access to it directly.  2011 Sandy Bridge and AMD Fusion integrated Northbridge functions into CPUs, along with processor cores, memory controller and graphics processing unit. So components are closer together today than depicted in this picture.
+
+* Symmetric Multiprocessor (SMP)
+* No more Frontside Bus or Northbridge
+* Image by Khazadum, Wikimedia Commons
+
+<img src="smp.png" class="illustration" note="final slash needed"/>
+
 
 !SLIDE transition=blindY
 # Memory Wall
@@ -61,11 +78,15 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 	Shamelessly cribbed from this gist: https://gist.github.com/2843375
 
 !SLIDE transition=blindY
-# Current Intel Processors
-* Westmere
-* Nehalem
-* Sandy Bridge
-* Ivy Bridge - not on servers yet
+# Current Processors
+.notes Westmere was the 32nm die shrink of Nehalem.  Ivy Bridge uses 22nm.  I'm ignoring Oracle SPARC here, but note that Oracle is supposedly building a 16K core UltraSPARC 64.  Current Intel top of the line is Xeon E7-8870 (80 cores, 32MB L3, 4TB RAM), but it's a Westmere-based microarchitecture.  The E5-2600 Romley is the top shelf new Sandy Bridge offering - it's specs don't sound as mighty (8 cores per socket, max 20MB L3, 1TB RAM).  Don't be fooled, the Direct Data IO makes up for it as disks network cards can do DMA (Direct Memory Access) from L3, not RAM.  Also has two memory read ports, whereas previous architectures only had one and were a bottleneck for math-intensive applications.  Sandy Bridge is 4-30MB (8MB is currently max for mobile platforms, even with Ivy Bridge), includes the processor graphics.  Sandy/Ivy Bridge and Bulldozer support the new AVX (Advanced Vector Extensions) instruction set of x86.
+
+* Intel
+	* Nehalem/Westmere
+	* Sandy Bridge
+	* Ivy Bridge - not on servers yet
+* AMD
+	* Bulldozer
 
 !SLIDE transition=blindY
 # Sandy Bridge Microarchitecture
@@ -82,18 +103,25 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # Registers
+.notes Sandy Bridge has 168 Integer/FP
 
 * On-core
 * Can be accessed in a single cycle
 * A 64-bit Intel Nehalem CPU had 128 Integer registers, 128 floating point registers
 
 !SLIDE transition=blindY
-# Store Buffers
-.notes Store buffers disambiguate memory access and manage dependencies for instructions (loads and stores) occurring out of program order. CPUs typically have load and store buffers which are associative queues of separate load and store instructions that are outstanding to the cache which can be snooped to preserve program order. 
+# Load/Store Buffers
+.notes Store buffers disambiguate memory access and manage dependencies for instructions (loads and stores) occurring out of program order. CPUs typically have load and store buffers which are associative queues of separate load and store instructions that are outstanding to the cache which can be snooped to preserve program order.   PRF allowed Intel to lessen amount of data kept on-die.
 
-* Load
-* Store
+* Nehalem passed operands with each instruction
+* Sandy Bridge uses the Physical Register File to store operands
+* Being off-die creates a larger window for Out of Order (OoO) execution
 * ~1 cycle
+
+!SLIDE transition=blindY
+# Sandy Bridge PRF
+
+<img src="prf.jpg" class="illustration" note="final slash needed"/>
 
 !SLIDE transition=blindY
 # SRAM
@@ -106,36 +134,35 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # L0
-.notes Macro ops have to be decoded into micro ops to be handled by the CPU.  Nehalem used L1 for macro ops decoding, but Sandy Bridge caches the uops (Micro-operations), boosting performance in tight code (small, highly profiled and optimized, can be secure, testable, easy to migrate).  Not the same as the older "trace" cache, which stored uops in the order in which they were executed, which means lots of potential duplication.  No duplication in the L0, storing only unique decode instructions.  Hot loops are those where the program spends the majority of its time.
+.notes Macro ops have to be decoded into micro ops to be handled by the CPU.  Nehalem used L1 for macro ops decoding and had a copy of every operand required, but Sandy Bridge caches the uops (Micro-operations), boosting performance in tight code (small, highly profiled and optimized, can be secure, testable, easy to migrate).  Not the same as the older "trace" cache, which stored uops in the order in which they were executed, which meant lots of potential duplication.  No duplication in the L0, storing only unique decode instructions.  Hot loops are those where the program spends the majority of its time.  Theoretical size of 1.5Kuops, effective utilization possibly much lower.  Hot loops should be sized to fit here.
 
 * A decoded cache of the last 1536 uops (~6kB)
-* Well-suited for hot loops
+* Well-suited for hot inner loops
+* Only pointers to operands in a uop are sent for processing on Sandy Bridge
 * When in use, the CPU puts the L1 and decoder to "sleep" to save energy and minimize heat.
 
 !SLIDE transition=blindY
 # L1
-.notes Instructions are generated by the compiler, which knows rules for good code generation.  Code has predictable patterns and CPUs are good at recognizing them, which helps pre-fetching.  Spatial and temporal locality is good.  Nehalem could load 128 bits per cycle, but Sandy Bridge can load double that because load and store address units can be interchanged - thus using 2 128-bit units per cycle instead of one.
+.notes Instructions are generated by the compiler, which knows rules for good code generation.  Code has predictable patterns and CPUs are good at recognizing them, which helps pre-fetching.  Spatial and temporal locality is good.  Nehalem could load 128 bits per cycle, but Sandy Bridge can load double that because load and store address units can be interchanged - thus using 2 128-bit units per cycle instead of one.  Write through to L2 used by Bulldozer (AMD)
 
 * Divided into data and instructions
 * 32K data, 32K instructions per core on a Sandy Bridge
+* 16KB data per cluster, 64KB instruction per core
 * 3-4 cycles to get to L1d
-
-!SLIDE transition=blindY
-# Line Feed/Write Combining Buffers
-
-	TODO
+* Uses "write through" back to L2 on Bulldozer
 
 !SLIDE transition=blindY
 # L2
 .notes For random access, when the working set size is greater than the L2 size, cache misses start to grow.  Caches from L2 up are "unified", having both instructions and data (not in terms of shared across cores).
 
-* Bigger, 256K per core on a Sandy Bridge
+* 256K per core on a Sandy Bridge
+* 2MB per "module" on AMD's Bulldozer architecture
 * 14 cycles
-* Unified from here up
+* Unified data and instruction caches from here up
 
 !SLIDE transition=blindY
 # L3
-.notes where concurrency takes place, data is passed between cores on a socket.  Current Intel top of the line is Xeon E7-8870 (32MB L3, 4TB RAM), but it's a Nehalem-based microarchitecture.  The E5 is the top shelf new Sandy Bridge offering, but it's specifications aren't as mighty (max 20MB L3, 1TB RAM).  Sandy Bridge is 4-30MB (8MB is currently max for mobile platforms, even with Ivy Bridge), includes the processor graphics.
+.notes where concurrency takes place, data is passed between cores on a socket.
 
 * Was a unified cache up until Sandy Bridge, shared between cores
 * Became known as the Last Level Cache (LLC)
@@ -170,7 +197,7 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # Inter-Socket Communication
-.notes GT/s is gigatransfers per seconds - how many times signals are sent per second.  Not a bus, but a point to point interface for connections between sockets in a NUMA platform, or from processors to I/O and peripheral controllers.  DDR = double data rate, two data transferred per clock cycle.  HT could theoretically be up to 32 bits per transmission, but hasn't been done yet that I know of.  HT can be used for more than linking processors - has applications in as well.    Processors "snoop" on each other, and certain actions are announced on external pins to make changes visible to others.  The address of the cache line is visible through the address bus.
+.notes GT/s is gigatransfers per seconds - how many times signals are sent per second.  Not a bus, but a point to point interface for connections between sockets in a NUMA platform, or from processors to I/O and peripheral controllers.  DDR = double data rate, two data transferred per clock cycle.  HT could theoretically be up to 32 bits per transmission, but hasn't been done yet that I know of.  HT can be used for more than linking processors - has applications in as well.  Processors "snoop" on each other, and certain actions are announced on external pins to make changes visible to others.  The address of the cache line is visible through the address bus.  SB can transfer on both the rise & fall of the clock cycle and is full duplex.
 
 * Uses Quick Path Interconnect links (QPI, Intel) or HyperTransport (AMD) for:
 	* cache coherency across sockets
@@ -178,7 +205,7 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 * QPI is proprietary to Intel.  Maximum speed of 8 GT/s
 * HyperTransport was developed by a consortium of AMD, NVidia, Apple, etc. Maximum speed of 6.4 GT/s (that I know of)
 * Both are DDR and point to point interfaces to other CPUs in a NUMA setup
-* Both transfer 16 bits per transmission in practice
+* Both transfer 16 bits per transmission in practice, but Sandy Bridge is really 32
 
 !SLIDE transition=blindY
 # MESI+F Cache Coherency Protocol
@@ -193,14 +220,15 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # DRAM
-.notes One transistor, one capacitor.  Reading contiguous memory is faster than random access due to how you read - you get one write combining buffer at a time from each of the memory banks, 33% slower.  240 cycles to get data from here.  (Martin: DRAM uses Row Buffers as you address a row of memory in a bank.)  E7-8870 can hold 4TB of RAM
+.notes One transistor, one capacitor.  Reading contiguous memory is faster than random access due to how you read - you get one write combining buffer at a time from each of the memory banks, 33% slower.  240 cycles to get data from here.  E7-8870 (Nehalem) can hold 4TB of RAM
 
 * Very dense, only 2 pieces of circuitry per datum
 * Refresh is just another read operation where the result is discarded & blocks access
 * DRAM "leaks" its charge, but not sooner than 64 milliseconds
 * Every read depletes the charge, requires a subsequent recharge
 * Memory Controllers can "refresh" DRAM by sending a charge through the entire device
-* Takes NS to retrieve from here
+* Uses a prefetch buffer for fast access to data words in a physical row 
+* Takes 240 cycles (100 NS) to retrieve from here
 
 !SLIDE transition=blindY
 # DDR3 SDRAM
@@ -232,11 +260,11 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # Striding & Pre-fetching
-.notes Doesn't have to be contiguous in an array, you can be jumping in 2K chunks without a performance hit.  As long as it's predictable, it will fetch the memory before you need it and have it staged.  Pre-fetching happens with L1d, can happen for L2 for systems with long pipelines.  Hardware prefetching cannot cross page boundaries, which slows it down as the working set size increases. If it did and the page wasn't there or valid, th OS would have to get involved and th program would experience a page fault it didn't initiate itself.  (Martin: Pre-fetching can actually hurt if your code is not predictable in access pattern.  Lines that may have temporal benefit get evicted by the pre-fetcher fetching line not to be used.)
+.notes Doesn't have to be contiguous in an array, you can be jumping in 2K chunks without a performance hit.  As long as it's predictable, it will fetch the memory before you need it and have it staged.  Pre-fetching happens with L1d, can happen for L2 for systems with long pipelines.  Hardware prefetching cannot cross page boundaries, which slows it down as the working set size increases. If it did and the page wasn't there or valid, th OS would have to get involved and th program would experience a page fault it didn't initiate itself.  Temporally relevant data may be evicted fetching a line that will not be used.
 
 * Predictable memory access is really important
 * Hardware prefetcher on the core looks for patterns of memory access
-* Can be counter-productive, believe it or not
+* Can be counter-productive if the access pattern is not predictable
 
 !SLIDE transition=blindY
 # Cache Misses
@@ -247,7 +275,7 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # Hyperthreading
-.notes Hyper threading shares all CPU resources except the register set.  Intel CPUs limit to two threads per core, allows one hyper thread to access resources (like the arithmetic logic unit) while another hyper thread is delayed, usually by memory access.  Only more efficient if the combined runtime is lower than a single thread, possible by overlapping wait times for different memory access that would ordinarily be sequential.  The only variable is the number of cache hits.  Note that the effectively shared L1d (& L2) reduce the available caches and bandwidth for each thread to 50% when executing two completely different code (questionable unless the caches are very large), inducing more cache misses, therefore hyper threading is only useful in a limited set of situations.  Can be good for debugging with SMT.
+.notes Hyper threading shares all CPU resources except the register set.  Intel CPUs limit to two threads per core, allows one hyper thread to access resources (like the arithmetic logic unit) while another hyper thread is delayed, usually by memory access.  Only more efficient if the combined runtime is lower than a single thread, possible by overlapping wait times for different memory access that would ordinarily be sequential.  The only variable is the number of cache hits.  Note that the effectively shared L1d (& L2) reduce the available caches and bandwidth for each thread to 50% when executing two completely different code (questionable unless the caches are very large), inducing more cache misses, therefore hyper threading is only useful in a limited set of situations.  Can be good for debugging with SMT.  Contrast this with Bulldozer's "modules" (akin to two cores), which has dedicated schedulers and integer units for each thread in a single processer.
 
 * Great for I/O-bound applications
 * If you have lots of cache misses
@@ -256,7 +284,7 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 
 !SLIDE transition=blindY
 # Programming Optimizations
-.notes Short lived data is not. Variables scoped within a method are stack allocated and very fast.  Think about the affect of contending locking.  You've got a warmed cache with all of the data you need, and because of contention (arbitrated at the kernel level), the thread will be put to sleep and your cached data is sitting until you can gain the lock from the arbitrator.  Due to LRU, it could be evicted.  The kernel is general purpose, may decide to do some housekeeping like defragging some memory, futher polluting your cache.  When your thread finally does gain the lock, it may end up running on an entirely different core and will have to rewarm its cache.  Everything you do will be a cache miss until its warm again.  CAS is better, an optimistic locking strategy.  Most version control systems use this.  Check the value before you replace it with a new value.  If it's different, re-read and try again.  Happens in user space, not at the kernel, all on thread.  Algos get a lot harder, though - state machines with many more steps and complexity.  And there is still a non-negligible cost.  Remember the cycle time diffs for different cache sizes; if the workload can be tailored to the size of the last level cache, performance can be dramatically improved.  (Martin: Program optimisation: For large n I would consider "cache oblivious algorithms".)
+.notes Short lived data is not cheap, but variables scoped within a method running on the JVM are stack allocated and very fast.  Think about the affect of contending locking.  You've got a warmed cache with all of the data you need, and because of contention (arbitrated at the kernel level), the thread will be put to sleep and your cached data is sitting until you can gain the lock from the arbitrator.  Due to LRU, it could be evicted.  The kernel is general purpose, may decide to do some housekeeping like defragging some memory, futher polluting your cache.  When your thread finally does gain the lock, it may end up running on an entirely different core and will have to rewarm its cache.  Everything you do will be a cache miss until its warm again.  CAS is better, an optimistic locking strategy.  Most version control systems use this.  Check the value before you replace it with a new value.  If it's different, re-read and try again.  Happens in user space, not at the kernel, all on thread.  Algos get a lot harder, though - state machines with many more steps and complexity.  And there is still a non-negligible cost.  Remember the cycle time diffs for different cache sizes; if the workload can be tailored to the size of the last level cache, performance can be dramatically improved.  Note that for large data sets, you may have to be oblivious to caching.
 
 * Stack allocated data is cheap
 * Pointer interaction - you have to retrieve data being pointed to, even in registers
@@ -331,8 +359,15 @@ Image by Alexander Taubenkorb, Wikimedia Commons
 * [What Every Programmer Should Know About Memory, Ulrich Drepper of RedHat, 2007](http://people.freebsd.org/~lstewart/articles/cpumemory.pdf)
 * [Java Performance](http://www.amazon.com/Java-Performance-Charlie-Hunt/dp/0137142528/ref=sr_1_1?ie=UTF8&qid=1330796836&sr=8-1)
 * [Wikipedia/Wikimedia Commons](http://wikipedia.org/)
+* [AnandTech](http://www.anandtech.com/)
+* [The Microarchitecture of AMD, Intel and VIA CPUs](http://www.agner.org/optimize/microarchitecture.pdf)
 * [Everything You Need to Know about the Quick Path Interconnect, Gabriel Torres](http://www.hardwaresecrets.com/article/610)
+
+!SLIDE transition=blindY
+# Credits
+
 * [Inside the Sandy Bridge Architecture, Gabriel Torres](http://www.hardwaresecrets.com/printpage/Inside-the-Intel-Sandy-Bridge-Microarchitecture/1161)
 * [Martin Thompson's Mechanical Sympathy blog and Disruptor presentations](http://mechanical-sympathy.blogspot.com/)
 * [Gil Tene, CTO of Azul Systems](http://www.azulsystems.com/presentations/application-memory-wall)
+* [AMD Bulldozer/Intel Sandy Bridge Comparison by Gionatan Danti](http://www.ilsistemista.net/index.php/hardware-analysis/24-bulldozer-vs-sandy-bridge-vs-k10-comparison-whats-wrong-with-amd-bulldozer.html)
 * Martin Thompson and Cliff Click provided feedback and additional content
