@@ -33,7 +33,7 @@ jamie.allen@typesafe.com
 .notes New machines today are SMP, a multiprocessor architecture where two or more identical processors are connected to a single shared main memory and controlled by a single OS instance.  Since Intel's Nehalem architecture, each CPU socket controls a portion of RAM, and no other socket has access to it directly.  2011 Sandy Bridge and AMD Fusion integrated Northbridge functions into CPUs, along with processor cores, memory controller and graphics processing unit. So components are closer together today than depicted in this picture.
 
 * Symmetric Multiprocessor (SMP)
-* No more Frontside Bus or Northbridge
+* No more Northbridge
 * Image by Khazadum, Wikimedia Commons
 
 <img src="smp.png" class="illustration" note="final slash needed"/>
@@ -79,7 +79,7 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # Current Processors
-.notes Westmere was the 32nm die shrink of Nehalem.  Ivy Bridge uses 22nm.  I'm ignoring Oracle SPARC here, but note that Oracle is supposedly building a 16K core UltraSPARC 64.  Current Intel top of the line is Xeon E7-8870 (80 cores, 32MB L3, 4TB RAM), but it's a Westmere-based microarchitecture.  The E5-2600 Romley is the top shelf new Sandy Bridge offering - it's specs don't sound as mighty (8 cores per socket, max 20MB L3, 1TB RAM).  Don't be fooled, the Direct Data IO makes up for it as disks network cards can do DMA (Direct Memory Access) from L3, not RAM.  Also has two memory read ports, whereas previous architectures only had one and were a bottleneck for math-intensive applications.  Sandy Bridge is 4-30MB (8MB is currently max for mobile platforms, even with Ivy Bridge), includes the processor graphics.  Sandy/Ivy Bridge and Bulldozer support the new AVX (Advanced Vector Extensions) instruction set of x86.
+.notes Westmere was the 32nm die shrink of Nehalem.  Ivy Bridge uses 22nm.  I'm ignoring Oracle SPARC here, but note that Oracle is supposedly building a 16K core UltraSPARC 64.  Current Intel top of the line is Xeon E7-8870 (80 cores, 32MB L3, 4TB RAM), but it's a Westmere-based microarchitecture.  The E5-2600 Romley is the top shelf new Sandy Bridge offering - it's specs don't sound as mighty (8 cores per socket, max 30MB L3, 1TB RAM).  Don't be fooled, the Direct Data IO makes up for it as disks network cards can do DMA (Direct Memory Access) from L3, not RAM.  Also has two memory read ports, whereas previous architectures only had one and were a bottleneck for math-intensive applications.  Sandy Bridge is 4-30MB (8MB is currently max for mobile platforms, even with Ivy Bridge), includes the processor graphics.  Sandy/Ivy Bridge and Bulldozer support the new AVX (Advanced Vector Extensions) instruction set of x86.
 
 * Intel
 	* Nehalem/Westmere
@@ -139,7 +139,7 @@ jamie.allen@typesafe.com
 * A decoded cache of the last 1536 uops (~6kB)
 * Well-suited for hot inner loops
 * Only pointers to operands in a uop are sent for processing on Sandy Bridge
-* When in use, the CPU puts the L1 and decoder to "sleep" to save energy and minimize heat.
+* The CPU can put the L1 and decoder to "sleep" to save energy and minimize heat.
 
 !SLIDE transition=blindY
 # L1
@@ -153,30 +153,31 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # L2
-.notes For random access, when the working set size is greater than the L2 size, cache misses start to grow.  Caches from L2 up are "unified", having both instructions and data (not in terms of shared across cores).
+.notes When the working set size random access is greater than the L2 size, cache misses start to grow.  Caches from L2 up are "unified", having both instructions and data (not in terms of shared across cores).
 
 * 256K per core on a Sandy Bridge
 * 2MB per "module" on AMD's Bulldozer architecture
-* 14 cycles
+* 14 cycles to reach
 * Unified data and instruction caches from here up
 
 !SLIDE transition=blindY
 # L3
-.notes where concurrency takes place, data is passed between cores on a socket.
+.notes where concurrency takes place, data is passed between cores on a socket.  Sandy Bridge allows only exclusive access per core.
 
 * Was a unified cache up until Sandy Bridge, shared between cores
 * Became known as the Last Level Cache (LLC)
 * Since no longer unified, any core can access data from any of the LLCs until Sandy Bridge
-* Sandy Bridge allows only exclusive access per core
 * Varies in size with different processors and versions of an architecture
 
 !SLIDE transition=blindY
 # Exclusive versus Inclusive
-.notes In an exclusive cache (AMD), when the processor needs data it is loaded by cache line into L1d, which evicts a line to L2, which evicts a line to L3, which evicts a line to main memory; each eviction is progressively more expensive.  In an inclusive cache (Intel), eviction is much faster, but requires a larger L2.
+.notes In an exclusive cache (AMD), when the processor needs data it is loaded by cache line into L1d, which evicts a line to L2, which evicts a line to L3, which evicts a line to main memory; each eviction is progressively more expensive.  In an inclusive cache (Intel), eviction is much faster - if another processor wants to delete data, it only has to check L2 because it knows L1 will have it as well.  Exclusive will have to check both, which is more expensive.
 
 * Only relevant below L3
 * AMD is exclusive, progressively more costly
-* Intel is inclusive, requires larger L2
+* Exclusive can hold more data
+* Intel is inclusive
+* Inclusive can be better for inter-processor memory sharing
 
 !SLIDE transition=blindY
 # Memory Controller
@@ -184,7 +185,7 @@ jamie.allen@typesafe.com
 
 * Handles communication between the CPU and RAM
 * Contain the logic to read to and write from RAM
-* Integrated Memory Controller
+* Integrated Memory Controller on die
 
 !SLIDE transition=blindY
 # Intra-Socket Communication
@@ -203,30 +204,30 @@ jamie.allen@typesafe.com
 	* cache coherency across sockets
 	* snooping
 * QPI is proprietary to Intel.  Maximum speed of 8 GT/s
+* Each QPI message takes ~20NS
 * HyperTransport was developed by a consortium of AMD, NVidia, Apple, etc. Maximum speed of 6.4 GT/s (that I know of)
 * Both are DDR and point to point interfaces to other CPUs in a NUMA setup
 * Both transfer 16 bits per transmission in practice, but Sandy Bridge is really 32
 
 !SLIDE transition=blindY
 # MESI+F Cache Coherency Protocol
-.notes Request for Ownership (RFO): a cache line is held exclusively for read by one processor, but another requests for write.  Cache line is sent, but not marked shared by the original holder.  Instead, it is marked Invalid and the other cache becomes Exclusive.  This marking happens in the memory controller.  Performing this operation in the last level cache is expensive, as is the I->M transition.  If a Shared cache line is modified, all other views of it must be marked invalid via an announcement RFO message.  If Exclusive, no need to announce.  Processors will try to keep cache lines in an exclusive state, as the E to M transition is much faster than S to M.  RFOs occur when a thread is migrated to another processor and the cache lines have to be moved once, or when two threads absolutely must share a line; the costs ar a bit smaller when shared across two cores on the same processor.  MESI transitions cannot occur until all processors acknowledge a coherency message.  Collisions on the bus can happen, latenc can be high with NUMA systems, sheer traffic can slow things down - all reasons to minimize traffic.  Since code almost never changes, instruction caches do not use MESI but rather just a SI protocol.  If code does change, a lot of pessimistic assumptions have to be made by the controller.
+.notes Request for Ownership (RFO): a cache line is held exclusively for read by one processor, but another requests for write.  Cache line is sent, but not marked shared by the original holder.  Instead, it is marked Invalid and the other cache becomes Exclusive.  This marking happens in the memory controller.  Performing this operation in the last level cache is expensive, as is the I->M transition.  If a Shared cache line is modified, all other views of it must be marked invalid via an announcement RFO message.  If Exclusive, no need to announce.  Processors will try to keep cache lines in an exclusive state, as the E to M transition is much faster than S to M.  RFOs occur when a thread is migrated to another processor and the cache lines have to be moved once, or when two threads absolutely must share a line; the costs ar a bit smaller when shared across two cores on the same processor.  MESI transitions cannot occur until all processors acknowledge a coherency message.  Collisions on the bus can happen, latency can be high with NUMA systems, sheer traffic can slow things down - all reasons to minimize traffic.  Since code almost never changes, instruction caches do not use MESI but rather just a SI protocol.  If code does change, a lot of pessimistic assumptions have to be made by the controller.
 
 * Modified, the local processor has changed the cache line, implies only one who has it
 * Exclusive, only one processor is using the cache line, not modified
 * Shared, multiple processors are using the cache line, not modified
 * Invalid, the cache line is invalid (unused)
 * Forward, to another socket via QPI
-* Each QPI message takes ~20NS
 
 !SLIDE transition=blindY
 # DRAM
-.notes One transistor, one capacitor.  Reading contiguous memory is faster than random access due to how you read - you get one write combining buffer at a time from each of the memory banks, 33% slower.  240 cycles to get data from here.  E7-8870 (Nehalem) can hold 4TB of RAM
+.notes One transistor, one capacitor.  Reading contiguous memory is faster than random access due to how you read - you get one write combining buffer at a time from each of the memory banks, 33% slower.  240 cycles to get data from here.  E7-8870 (Westhere) can hold 4TB of RAM
 
 * Very dense, only 2 pieces of circuitry per datum
-* Refresh is just another read operation where the result is discarded & blocks access
 * DRAM "leaks" its charge, but not sooner than 64 milliseconds
 * Every read depletes the charge, requires a subsequent recharge
 * Memory Controllers can "refresh" DRAM by sending a charge through the entire device
+* Refresh is just another read operation where the result is discarded & blocks access
 * Uses a prefetch buffer for fast access to data words in a physical row 
 * Takes 240 cycles (100 NS) to retrieve from here
 
@@ -250,7 +251,7 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # Cache Lines
-.notes A dirty cache line is not present in any other processor's cache; clean copies of the same cache line can reside in arbitrarily many caches. A cache line that has been modified has a dirty flag set to true, set to false when sent to main memory.  Be careful about what's on them, because if a line holds multiple variables and the state of one changes, coherency must be maintained.  Kills performance for parallel threads on an SMP machine.  Memory data is transferred to caches in 64 bit blocks, while a cache line is typically 64 bytes, therefore 8 transfers per cache line.  The blocks of a line arrive at different times, ~every 4 CPU cycles.  If the word in the line required is in the last block, that's about 30 cycles or more after the first word arrives.  However, the memory controller is free to request the blocks in a different order.  The processor can specify the "critical word",  and the block that word resides in can be retrieved first for the cache line by the memory controller.  The program has the data it needs and can continue while the rest of the line is retrieved and the cache is not yet in a consistent state, called "Critical Word First & Early Restart.". Note that with pre-fetching, the critical word is not known - if the processor request the cach line while the pre-fetching is in transit, it will not be able to influence the block ordering and will hav to wait until the critical word arrives in order.  Position in the cache line matters, faster to be at the front than the rear.
+.notes A dirty cache line is not present in any other processor's cache; clean copies of the same cache line can reside in arbitrarily many caches. A cache line that has been modified has a dirty flag set to true, set to false when sent to main memory.  Be careful about what's on them, because if a line holds multiple variables and the state of one changes, coherency must be maintained.  Kills performance for parallel threads on an SMP machine.  Memory data is transferred to caches in 64 bit blocks, while a cache line is typically 64 bytes, therefore 8 transfers per cache line.  The blocks of a line arrive at different times, ~every 4 CPU cycles.  If the word in the line required is in the last block, that's about 30 cycles or more after the first word arrives.  However, the memory controller is free to request the blocks in a different order.  The processor can specify the "critical word",  and the block that word resides in can be retrieved first for the cache line by the memory controller.  The program has the data it needs and can continue while the rest of the line is retrieved and the cache is not yet in a consistent state, called "Critical Word First & Early Restart". Note that with pre-fetching, the critical word is not known - if the processor request the cache line while the pre-fetching is in transit, it will not be able to influence the block ordering and will hav to wait until the critical word arrives in order.  Position in the cache line matters, faster to be at the front than the rear.
 
 * Most commonly 64 contiguous bytes, can be 32-256.  
 * Look out for false sharing
@@ -260,7 +261,7 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # Striding & Pre-fetching
-.notes Doesn't have to be contiguous in an array, you can be jumping in 2K chunks without a performance hit.  As long as it's predictable, it will fetch the memory before you need it and have it staged.  Pre-fetching happens with L1d, can happen for L2 for systems with long pipelines.  Hardware prefetching cannot cross page boundaries, which slows it down as the working set size increases. If it did and the page wasn't there or valid, th OS would have to get involved and th program would experience a page fault it didn't initiate itself.  Temporally relevant data may be evicted fetching a line that will not be used.
+.notes Doesn't have to be contiguous in an array, you can be jumping in 2K chunks without a performance hit.  As long as it's predictable, it will fetch the memory before you need it and have it staged.  Pre-fetching happens with L1d, can happen for L2 for systems with long pipelines.  Hardware prefetching cannot cross page boundaries, which slows it down as the working set size increases. If it did and the page wasn't there or is invalid, the OS would have to get involved and the program would experience a page fault it didn't initiate itself.  Temporally relevant data may be evicted fetching a line that will not be used.
 
 * Predictable memory access is really important
 * Hardware prefetcher on the core looks for patterns of memory access
@@ -268,7 +269,7 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # Cache Misses
-.notes The pre-fetcher will bring data into L1 for you.  The simpler your code, the better it can do this.  If your code is complex, it will do it wrong, costing a cache miss and forcing it to lose the value of pre-fetching and having to go out to an outer layer to get that instruction again.  Cache eviction is usually LRU; with more associativity (from more cores), the cost of maintaining the list is more expensive.
+.notes The pre-fetcher will bring data into L1d for you.  The simpler your code, the better it can do this.  If your code is complex, it will do it wrong, costing a cache miss and forcing it to lose the value of pre-fetching and having to go out to an outer layer to get that instruction again.  Cache eviction is usually LRU; with more associativity (from more cores), the cost of maintaining the list is more expensive.
 
 * Cost hunderds of cycles
 * Keep your code simple
@@ -284,7 +285,7 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # Programming Optimizations
-.notes Short lived data is not cheap, but variables scoped within a method running on the JVM are stack allocated and very fast.  Think about the affect of contending locking.  You've got a warmed cache with all of the data you need, and because of contention (arbitrated at the kernel level), the thread will be put to sleep and your cached data is sitting until you can gain the lock from the arbitrator.  Due to LRU, it could be evicted.  The kernel is general purpose, may decide to do some housekeeping like defragging some memory, futher polluting your cache.  When your thread finally does gain the lock, it may end up running on an entirely different core and will have to rewarm its cache.  Everything you do will be a cache miss until its warm again.  CAS is better, an optimistic locking strategy.  Most version control systems use this.  Check the value before you replace it with a new value.  If it's different, re-read and try again.  Happens in user space, not at the kernel, all on thread.  Algos get a lot harder, though - state machines with many more steps and complexity.  And there is still a non-negligible cost.  Remember the cycle time diffs for different cache sizes; if the workload can be tailored to the size of the last level cache, performance can be dramatically improved.  Note that for large data sets, you may have to be oblivious to caching.
+.notes Short lived data is not cheap, but variables scoped within a method running on the JVM are stack allocated and very fast.  Think about the affect of contending locking.  You've got a warmed cache with all of the data you need, and because of contention (arbitrated at the kernel level), the thread will be put to sleep and your cached data is sitting until you can gain the lock from the arbitrator.  Due to LRU, it could be evicted.  The kernel is general purpose, may decide to do some housekeeping like defragging some memory, futher polluting your cache.  When your thread finally does gain the lock, it may end up running on an entirely different core and will have to rewarm its cache.  Everything you do will be a cache miss until its warm again.  CAS is better, checking the value before you replace it with a new value.  If it's different, re-read and try again.  Happens in user space, not at the kernel, all on thread.  Algos get a lot harder, though - state machines with many more steps and complexity.  And there is still a non-negligible cost.  Remember the cycle time diffs for different cache sizes; if the workload can be tailored to the size of the last level cache, performance can be dramatically improved.  Note that for large data sets, you may have to be oblivious to caching.
 
 * Stack allocated data is cheap
 * Pointer interaction - you have to retrieve data being pointed to, even in registers
@@ -300,7 +301,7 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # Data Structures
-.notes  If n is not very large, an array will beat it for performance.  LL and trees have pointer chasing which are bad for striding across 2K cache pre-fetching.  Java's hashmap uses chained buckets, where each hash's bucket is a linked list.  Clojure/Scala vectors are good, because they have groupings of contiguous memory in use, but do not require all data to be contiguous like Java's ArrayList.  Fastutil is additive, no removal, but that's how I'm currently using Riak, too.
+.notes  If n is not very large, an array will beat it for performance.  LL and trees have pointer chasing which are bad for striding across 2K cache pre-fetching.  Java's hashmap uses chained buckets, where each hash's bucket is a linked list.  Clojure/Scala vectors are good, because they have groupings of contiguous memory in use, but do not require all data to be contiguous like Java's ArrayList.  Fastutil is additive, no removal, but that's not necessarily a bad thing with proper tombstoning and data cleanup.
 
 * BAD: Linked list structures and tree structures
 * BAD: Java's HashMap uses chained buckets!
@@ -311,7 +312,7 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # Application Memory Wall & GC
-.notes We can have as much RAM/heap space as we want now.  And requirements for RAM grow at about 100x per decade.  But are we now bound by GC?  You can get 100GB of heap, but how long do you pause for marking/remarking phases and compaction?  Even on a 2-4 GB heap, you're going to get multi-second pauses - when and how often?  IBM Metronome collector is very predictable. Azul around one millisecond for phenomenal amounts of garbage.
+.notes We can have as much RAM/heap space as we want now.  And requirements for RAM grow at about 100x per decade.  But are we now bound by GC?  You can get 100GB of heap, but how long do you pause for marking/remarking phases and compaction?  Even on a 2-4 GB heap, you're going to get multi-second pauses - when and how often?  IBM Metronome collector is very predictable. Azul around one millisecond for phenomenal amounts of garbage with C4.
 
 * Tremendous amounts of RAM at low cost
 * But is GC the real cause?
@@ -347,11 +348,10 @@ jamie.allen@typesafe.com
 .notes Thermally-driven phase change, not an electronic process.  Faster because it doesn't need to erase a block of cells before writing.  Flash degrades at 5000 writes per sector, where PRAM lasts 100 million writes.  Some argue that PRAM should be considered a memristor as well.
 
 * Higher performance than today's DRAM
-* Intel seems more fascinated by this
-* No idea when we can expect to have something usable
+* Intel seems more fascinated by this, just released its "neuromorphic" chip design
 * Not able to perform processing
 * Write degradation is supposedly much slower
-* Susceptible to unintentional change 
+* Was considered susceptible to unintentional change, maybe fixed?
 
 !SLIDE transition=blindY
 # Credits
