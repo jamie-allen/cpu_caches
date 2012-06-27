@@ -8,6 +8,8 @@ jamie.allen@typesafe.com
 
 @jamie_allen
 
+github.com/jamie-allen
+
 <img src="typesafe-logo-081111.png" class="illustration" note="final slash needed"/>
 
 
@@ -21,13 +23,49 @@ jamie.allen@typesafe.com
 * Disruptor, 2011
 
 !SLIDE transition=blindY
-# Memory Wall
-.notes Gil Tene, CTO of Azul has a good presentation about this concept from a paper in 1994 on their website.  Each Intel core has 6 execution units able to perform work during a cycle (loading memory, storing memory, arithmetic, branch logic, shifting, etc), but they need to be fed data very fast to take advantage of it. Note that it didn't happen because of RAM, but the Application Memory Wall does exist in other forms, like GC pauses - applications designed to minimize GC can hit the memory wall, but those are highly specialized (like those using the Disruptor).
+# Symmetric Multiprocessor (SMP) Architecture
+.notes New machines today are SMP, a multiprocessor architecture where two or more identical processors are connected to a single shared main memory and controlled by a single OS instance.  Since Intel's Nehalem architecture, each CPU socket controls a portion of RAM, and no other socket has access to it directly.  2011 Sandy Bridge and AMD Fusion integrated Northbridge functions into CPUs, along with processor cores, memory controller and graphics processing unit.  So components are closer together today than depicted in this picture.
 
-* CPUs are getting faster
-* Memory isn't, and bandwidth is increasing at a much slower rate
-* It was predicted that applications would become memory-bound by now
-* Didn't happen
+* Symmetric Multiprocessor
+* No more Northbridge
+
+<img src="smp.png" class="illustration" note="final slash needed"/>
+
+!SLIDE transition=blindY
+# Memory Controller
+.notes Memory controllers were moved onto the processor die by AMD beginning with their AMD64 processors and by Intel with their Nehalem processors.
+
+* Handles communication between the CPU and RAM
+* Contain the logic to read to and write from RAM
+* Integrated Memory Controller on die
+
+!SLIDE transition=blindY
+# Non-Uniform Memory Access (NUMA)
+.notes NUMA architectures have more trouble migrating processes across cores.  Initially, it has to look for a core with the same speed accessing memory resources and enough resources for the process.  If none are found, it then allows for degradation.  NUMA is not the same as multiple commodity machines because they don't have a shared address space.  Thread migration across sockets is extremely expensive because the shared L3 cache isn't warmed.
+
+* Access time is dependent on the memory locality to a processor
+* Memory local to a processor can be accessed faster than memory farther away
+* The organization of processors reflect the time to access data in RAM, called the NUMA factor
+* Shared memory space (as opposed to multiple commodity machines)
+
+!SLIDE transition=blindY
+# Cache Lines
+.notes A dirty cache line is not present in any other processor's cache; clean copies of the same cache line can reside in arbitrarily many caches. A cache line that has been modified has a dirty flag set to true, set to false when sent to main memory.  Be careful about what's on them, because if a line holds multiple variables and the state of one changes, coherency must be maintained.  Kills performance for parallel threads on an SMP machine.  Memory data is transferred to caches in 64 bit blocks, while a cache line is typically 64 bytes, therefore 8 transfers per cache line.  The blocks of a line arrive at different times, ~every 4 CPU cycles.  If the word in the line required is in the last block, that's about 30 cycles or more after the first word arrives.  However, the memory controller is free to request the blocks in a different order.  The processor can specify the "critical word",  and the block that word resides in can be retrieved first for the cache line by the memory controller.  The program has the data it needs and can continue while the rest of the line is retrieved and the cache is not yet in a consistent state, called "Critical Word First & Early Restart". Note that with pre-fetching, the critical word is not known - if the processor request the cache line while the pre-fetching is in transit, it will not be able to influence the block ordering and will hav to wait until the critical word arrives in order.  Position in the cache line matters, faster to be at the front than the rear.
+
+* Most commonly 64 contiguous bytes, can be 32-256.  
+* Look out for false sharing
+* Padding can be used to ensure unshared line
+* Position in the line matters, but not if pre-fetched
+* @Contended annotation coming to JVM?
+
+!SLIDE transition=blindY
+# Cache Write Strategies
+.notes Write through caching: immediately write to main memory after cache line changed. Slow, but predictable.  Lots of FSB traffic.  Write back caching: mark flag bit as dirty, when evicted the processor notes and sends cache line back to main memory, instead of just dropping it; have to be careful of false sharing and cache coherency.  Write combining caching: used by graphics cards, groups writes to main memory for speed.  Uncachable: dynamic memory values that can change without warning.  Used for commodity hardware.
+
+* Write through - change goes back to main memory
+* Write back - marked when dirty, eviction sends back to main memory
+* Write combining - grouped writes back to main memory
+* Uncachable - dynamic values that can change without warning
 
 !SLIDE transition=blindY
 # Current Processors
@@ -39,6 +77,8 @@ jamie.allen@typesafe.com
 	* Ivy Bridge - not on servers yet
 * AMD
 	* Bulldozer
+* Oracle
+	* UltraSPARC isn't dead
 
 !SLIDE transition=blindY
 # Sandy Bridge Microarchitecture
@@ -49,23 +89,6 @@ jamie.allen@typesafe.com
 # CPU Caches
 
 <img src="all_caches.png" class="illustration" note="final slash needed"/>
-
-!SLIDE transition=blindY
-# Symmetric Multiprocessor (SMP) Architecture
-.notes New machines today are SMP, a multiprocessor architecture where two or more identical processors are connected to a single shared main memory and controlled by a single OS instance.  Since Intel's Nehalem architecture, each CPU socket controls a portion of RAM, and no other socket has access to it directly.  2011 Sandy Bridge and AMD Fusion integrated Northbridge functions into CPUs, along with processor cores, memory controller and graphics processing unit. So components are closer together today than depicted in this picture.
-
-* Symmetric Multiprocessor
-* No more Northbridge
-
-<img src="smp.png" class="illustration" note="final slash needed"/>
-
-!SLIDE transition=blindY
-# Non-Uniform Memory Access (NUMA)
-.notes NUMA architectures have more trouble migrating processes across cores.  Initially, it has to look for a core with the same speed accessing memory resources and enough resources for the process.  If none are found, it then allows for degradation.  NUMA is not the same as multiple commodity machines because they don't have a shared address space.  Thread migration across sockets is extremely expensive because the shared L3 cache isn't warmed.
-
-* Access time is dependent on the memory locality to a processor
-* Memory local to a processor can be accessed faster than memory farther away
-* The organization of processors reflect the time to access data in RAM, called the NUMA factor.
 
 !SLIDE transition=blindY
 # Data Locality
@@ -114,22 +137,20 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # Load/Store Buffers
-.notes Store buffers disambiguate memory access and manage dependencies for instructions (loads and stores) occurring out of program order. CPUs typically have load and store buffers which are associative queues of separate load and store instructions that are outstanding to the cache which can be snooped to preserve program order.   PRF allowed Intel to lessen amount of data kept on-die.
+.notes Store buffers disambiguate memory access and manage dependencies for instructions (loads and stores) occurring out of program order. CPUs typically have load and store buffers which are associative queues of separate load and store instructions that are outstanding.
 
-* Nehalem passed operands with each instruction
-* Sandy Bridge uses the Physical Register File to store operands
-* Being off-die creates a larger window for Out of Order (OoO) execution
+* Important for Out of Order (OoO) execution
+* Can be snooped by other cores to preserve program order
 * ~1 cycle
 
 !SLIDE transition=blindY
-# Sandy Bridge PRF
-
-<img src="prf.jpg" class="illustration" note="final slash needed"/>
-
-!SLIDE transition=blindY
 # Associativity
+.notes It's a tradeoff - if data can be mapped to multiple places, all of those places have to be checked to see if the data is there, costing power and possibly time.  However, more associativity means less cache misses.
 
-	TODO: http://en.wikipedia.org/wiki/CPU_cache
+* Replacement policy determines where in the cache an entry of main memory will go
+* Fully Associative: Put it anywhere
+* Somewhere in the middle: 2-4 way set/skewed associative
+* Direct Mapped: Each entry can only go in one specific place 
 
 !SLIDE transition=blindY
 # SRAM
@@ -146,7 +167,6 @@ jamie.allen@typesafe.com
 
 * A decoded cache of the last 1536 uops (~6kB)
 * Well-suited for hot inner loops
-* Only pointers to operands in a uop are sent for processing on Sandy Bridge
 * The CPU can put the L1 and decoder to "sleep" to save energy and minimize heat.
 
 !SLIDE transition=blindY
@@ -157,7 +177,7 @@ jamie.allen@typesafe.com
 * 32K data, 32K instructions per core on a Sandy Bridge
 * 16KB data per cluster, 64KB instruction per core
 * 3-4 cycles to get to L1d
-* Uses "write through" back to L2 on Bulldozer
+* Bulldozer uses "write through" back to L2
 
 !SLIDE transition=blindY
 # L2
@@ -182,25 +202,18 @@ jamie.allen@typesafe.com
 .notes In an exclusive cache (AMD), when the processor needs data it is loaded by cache line into L1d, which evicts a line to L2, which evicts a line to L3, which evicts a line to main memory; each eviction is progressively more expensive.  In an inclusive cache (Intel), eviction is much faster - if another processor wants to delete data, it only has to check L2 because it knows L1 will have it as well.  Exclusive will have to check both, which is more expensive.
 
 * Only relevant below L3
-* AMD is exclusive, progressively more costly
-* Exclusive can hold more data
+* AMD is exclusive
+	* Progressively more costly due to eviction
+	* Can hold more data
 * Intel is inclusive
-* Inclusive can be better for inter-processor memory sharing
-
-!SLIDE transition=blindY
-# Memory Controller
-.notes Memory controllers were moved onto the processor die by AMD beginning with their AMD64 processors and by Intel with their Nehalem processors.
-
-* Handles communication between the CPU and RAM
-* Contain the logic to read to and write from RAM
-* Integrated Memory Controller on die
+	* Can be better for inter-processor memory sharing
 
 !SLIDE transition=blindY
 # Intra-Socket Communication
 .notes Components internal to a CPU using the ring include the cores, the L3, the system agent and the graphics controller.
 
 * Sandy Bridge introduced a ring architecture so that components inside of a CPU can communicate directly
-* L3 is no longer unified
+* L3 is no longer unified, each core has a region
 * The ring architecture in the Sandy Bridge has 4 rings in it, for data, request, ACK and snooping
 * The ring can select the shortest path between components for speed
 
@@ -229,14 +242,12 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # DRAM
-.notes One transistor, one capacitor.  Reading contiguous memory is faster than random access due to how you read - you get one write combining buffer at a time from each of the memory banks, 33% slower.  240 cycles to get data from here.  E7-8870 (Westhere) can hold 4TB of RAM
+.notes One transistor, one capacitor.  Reading contiguous memory is faster than random access due to how you read - you get one write combining buffer at a time from each of the memory banks, 33% slower.  240 cycles to get data from here.  E7-8870 (Westhere) can hold 4TB of RAM, E5-2600 Sandy Bridge only 1TB.
 
 * Very dense, only 2 pieces of circuitry per datum
 * DRAM "leaks" its charge, but not sooner than 64 milliseconds
 * Every read depletes the charge, requires a subsequent recharge
 * Memory Controllers can "refresh" DRAM by sending a charge through the entire device
-* Refresh is just another read operation where the result is discarded & blocks access
-* Uses a prefetch buffer for fast access to data words in a physical row 
 * Takes 240 cycles (100 NS) to retrieve from here
 
 !SLIDE transition=blindY
@@ -249,27 +260,8 @@ jamie.allen@typesafe.com
 * DDR4 is coming
 
 !SLIDE transition=blindY
-# Cache Write Strategies
-.notes Write through caching: immediately write to main memory after cache line changed. Slow, but predictable. Lots of FSB traffic.  Write back caching: mark flag bit as dirty, when evicted the processor notes and sends cache line back to main memory, instead of just dropping it; have to be careful of false sharing and cache coherency.  Write combining caching: used by graphics cards, groups writes to main memory for speed.  Uncachable: dynamic memory values that can change without warning.  Used for commodity hardware.
-
-* Write through
-* Write back
-* Write combining
-* Uncachable
-
-!SLIDE transition=blindY
-# Cache Lines
-.notes A dirty cache line is not present in any other processor's cache; clean copies of the same cache line can reside in arbitrarily many caches. A cache line that has been modified has a dirty flag set to true, set to false when sent to main memory.  Be careful about what's on them, because if a line holds multiple variables and the state of one changes, coherency must be maintained.  Kills performance for parallel threads on an SMP machine.  Memory data is transferred to caches in 64 bit blocks, while a cache line is typically 64 bytes, therefore 8 transfers per cache line.  The blocks of a line arrive at different times, ~every 4 CPU cycles.  If the word in the line required is in the last block, that's about 30 cycles or more after the first word arrives.  However, the memory controller is free to request the blocks in a different order.  The processor can specify the "critical word",  and the block that word resides in can be retrieved first for the cache line by the memory controller.  The program has the data it needs and can continue while the rest of the line is retrieved and the cache is not yet in a consistent state, called "Critical Word First & Early Restart". Note that with pre-fetching, the critical word is not known - if the processor request the cache line while the pre-fetching is in transit, it will not be able to influence the block ordering and will hav to wait until the critical word arrives in order.  Position in the cache line matters, faster to be at the front than the rear.
-
-* Most commonly 64 contiguous bytes, can be 32-256.  
-* Look out for false sharing
-* Padding can be used to ensure unshared line
-* Position in the line matters
-* @Contended annotation coming?
-
-!SLIDE transition=blindY
 # Striding & Pre-fetching
-.notes Doesn't have to be contiguous in an array, you can be jumping in 2K chunks without a performance hit.  As long as it's predictable, it will fetch the memory before you need it and have it staged.  Pre-fetching happens with L1d, can happen for L2 for systems with long pipelines.  Hardware prefetching cannot cross page boundaries, which slows it down as the working set size increases. If it did and the page wasn't there or is invalid, the OS would have to get involved and the program would experience a page fault it didn't initiate itself.  Temporally relevant data may be evicted fetching a line that will not be used.
+.notes Doesn't have to be contiguous in an array, you can be jumping in 2K chunks without a performance hit.  As long as it's predictable, it will fetch the memory before you need it and have it staged.  Pre-fetching happens with L1d, can happen for L2 in systems with long pipelines.  Hardware prefetching cannot cross page boundaries, which slows it down as the working set size increases. If it did and the page wasn't there or is invalid, the OS would have to get involved and the program would experience a page fault it didn't initiate itself.  Temporally relevant data may be evicted fetching a line that will not be used.
 
 * Predictable memory access is really important
 * Hardware prefetcher on the core looks for patterns of memory access
@@ -277,10 +269,13 @@ jamie.allen@typesafe.com
 
 !SLIDE transition=blindY
 # Cache Misses
-.notes The pre-fetcher will bring data into L1d for you.  The simpler your code, the better it can do this.  If your code is complex, it will do it wrong, costing a cache miss and forcing it to lose the value of pre-fetching and having to go out to an outer layer to get that instruction again.  Cache eviction is usually LRU; with more associativity (from more cores), the cost of maintaining the list is more expensive.
+.notes The pre-fetcher will bring data into L1d for you.  The simpler your code, the better it can do this.  If your code is complex, it will do it wrong, costing a cache miss and forcing it to lose the value of pre-fetching and having to go out to an outer layer to get that instruction again.  Cache eviction is usually LRU; with more associativity (from more cores), the cost of maintaining the list is more expensive.  Compulsory/Capacity/Conflict are miss types.
 
 * Cost hunderds of cycles
 * Keep your code simple
+* Instruction read misses are most expensive
+* Data read miss are less so, but still hurt performance
+* Write misses aren't so bad unless the policy is "write through"
 
 !SLIDE transition=blindY
 # Hyperthreading
@@ -340,6 +335,7 @@ jamie.allen@typesafe.com
 * David Ungar says > 24 cores, generally many 10s of cores
 * Really trying to think about it with 1000 or more
 * Cache coherency won't be possible
+* Non-deterministic
 
 !SLIDE transition=blindY
 # Memristor
