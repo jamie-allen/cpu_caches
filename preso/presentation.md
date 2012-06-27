@@ -23,10 +23,9 @@ github.com/jamie-allen
 
 !SLIDE transition=blindY
 # Symmetric Multiprocessor (SMP) Architecture
-.notes New machines today are SMP, a multiprocessor architecture where two or more identical processors are connected to a single shared main memory and controlled by a single OS instance.  Since Intel's Nehalem architecture, each CPU socket controls a portion of RAM, and no other socket has access to it directly.  2011 Sandy Bridge and AMD Fusion integrated Northbridge functions into CPUs, along with processor cores, memory controller and graphics processing unit.  So components are closer together today than depicted in this picture.
+.notes New machines today are SMP, a multiprocessor architecture where two or more identical processors are connected to a single shared main memory and controlled by a single OS instance.  2011 Sandy Bridge and AMD Fusion integrated Northbridge functions into CPUs, along with processor cores, memory controller and graphics processing unit.  So components are closer together today than depicted in this picture.
 
-* Symmetric Multiprocessor
-* Processor/Socket versus Core
+* Shared main memory, controlled by single OS
 * No more Northbridge
 
 <img src="smp.png" class="illustration" note="final slash needed"/>
@@ -269,6 +268,7 @@ github.com/jamie-allen
 * Every read depletes the charge, requires a subsequent recharge
 * Memory Controllers can "refresh" DRAM by sending a charge through the entire device
 * Takes 240 cycles (100 NS) to retrieve from here
+* Intel's Nehalem architecture - each CPU socket controls a portion of RAM, no other socket has direct access to it
 
 !SLIDE transition=blindY
 # DDR3 SDRAM
