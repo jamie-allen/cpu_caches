@@ -1,6 +1,6 @@
 {
-    "name"        : "Scala in 45M",
-    "description" : "Everything you need to know about Scala in 45 minutes",
+    "name"        : "CPU Caches",
+    "description" : "Everything you need to know about CPU Caching in 1 hour",
     "sections"    : [ {"section" : "preso" } ]
 }
 

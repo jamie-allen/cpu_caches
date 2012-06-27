@@ -158,7 +158,7 @@ github.com/jamie-allen
 * ~1 cycle
 
 !SLIDE transition=blindY
-# Associativity
+# Cache Associativity
 .notes It's a tradeoff - if data can be mapped to multiple places, all of those places have to be checked to see if the data is there, costing power and possibly time.  However, more associativity means less cache misses.
 
 * Replacement policy determines where in the cache an entry of main memory will go
@@ -180,9 +180,9 @@ github.com/jamie-allen
 .notes Macro ops have to be decoded into micro ops to be handled by the CPU.  Nehalem used L1 for macro ops decoding and had a copy of every operand required, but Sandy Bridge caches the uops (Micro-operations), boosting performance in tight code (small, highly profiled and optimized, can be secure, testable, easy to migrate).  Not the same as the older "trace" cache, which stored uops in the order in which they were executed, which meant lots of potential duplication.  No duplication in the L0, storing only unique decode instructions.  Hot loops are those where the program spends the majority of its time.  Theoretical size of 1.5Kuops, effective utilization possibly much lower.  Hot loops should be sized to fit here.
 
 * New to Sandy Bridge
-* A decoded cache of the last 1536 uops (~6kB)
+* A cache of the last 1536 uops (~6kB) decoded
 * Well-suited for hot loops
-* Not the same as a "trace" cache
+* Not the same as the older "trace" cache
 
 !SLIDE transition=blindY
 # L1
@@ -202,14 +202,16 @@ github.com/jamie-allen
 * 2MB per "module" on AMD's Bulldozer architecture
 * 14 cycles to reach
 * Unified data and instruction caches from here up
+* If the working set size is larger than L2, misses grow
 
 !SLIDE transition=blindY
 # L3
-.notes where concurrency takes place, data is passed between cores on a socket.  Sandy Bridge allows only exclusive access per core.
+.notes Sandy Bridge allows only exclusive access per core.
 
 * Was a unified cache up until Sandy Bridge, shared between cores
 * Became known as the Last Level Cache (LLC)
-* Since no longer unified, any core can access data from any of the LLCs until Sandy Bridge
+* Where concurrency takes place
+* Since no longer unified, any core could access data from any of the LLCs (until Sandy Bridge)
 * Varies in size with different processors and versions of an architecture
 
 !SLIDE transition=blindY
@@ -225,7 +227,7 @@ github.com/jamie-allen
 
 !SLIDE transition=blindY
 # Intra-Socket Communication
-.notes Components internal to a CPU using the ring include the cores, the L3, the system agent and the graphics controller.
+.notes Components internal to a CPU using the ring include the cores, the L3, the system agent and the graphics controller.  Used to require a specific channel for all linkages.
 
 * Sandy Bridge introduced a ring architecture so that components inside of a CPU can communicate directly
 * L3 is no longer unified, each core has a region
@@ -234,7 +236,7 @@ github.com/jamie-allen
 
 !SLIDE transition=blindY
 # Inter-Socket Communication
-.notes GT/s is gigatransfers per seconds - how many times signals are sent per second.  Not a bus, but a point to point interface for connections between sockets in a NUMA platform, or from processors to I/O and peripheral controllers.  DDR = double data rate, two data transferred per clock cycle.  HT could theoretically be up to 32 bits per transmission, but hasn't been done yet that I know of.  HT can be used for more than linking processors - has applications in as well.  Processors "snoop" on each other, and certain actions are announced on external pins to make changes visible to others.  The address of the cache line is visible through the address bus.  SB can transfer on both the rise & fall of the clock cycle and is full duplex.
+.notes GT/s is gigatransfers per seconds - how many times signals are sent per second.  Not a bus, but a point to point interface for connections between sockets in a NUMA platform, or from processors to I/O and peripheral controllers.  DDR = double data rate, two data transferred per clock cycle.  HT could theoretically be up to 32 bits per transmission, but hasn't been done yet that I know of.  HT can be used for more than linking processors - has applications in as well.  Processors "snoop" on each other, and certain actions are announced on external pins to make changes visible to others.  The address of the cache line is visible through the address bus.  Sandy Bridge can transfer on both the rise & fall of the clock cycle and is full duplex.
 
 * Uses Quick Path Interconnect links (QPI, Intel) or HyperTransport (AMD) for:
 	* cache coherency across sockets
@@ -249,15 +251,18 @@ github.com/jamie-allen
 # MESI+F Cache Coherency Protocol
 .notes Request for Ownership (RFO): a cache line is held exclusively for read by one processor, but another requests for write.  Cache line is sent, but not marked shared by the original holder.  Instead, it is marked Invalid and the other cache becomes Exclusive.  This marking happens in the memory controller.  Performing this operation in the last level cache is expensive, as is the I->M transition.  If a Shared cache line is modified, all other views of it must be marked invalid via an announcement RFO message.  If Exclusive, no need to announce.  Processors will try to keep cache lines in an exclusive state, as the E to M transition is much faster than S to M.  RFOs occur when a thread is migrated to another processor and the cache lines have to be moved once, or when two threads absolutely must share a line; the costs ar a bit smaller when shared across two cores on the same processor.  MESI transitions cannot occur until all processors acknowledge a coherency message.  Collisions on the bus can happen, latency can be high with NUMA systems, sheer traffic can slow things down - all reasons to minimize traffic.  Since code almost never changes, instruction caches do not use MESI but rather just a SI protocol.  If code does change, a lot of pessimistic assumptions have to be made by the controller.
 
+* Specific to data cache lines
+* Request for Ownership (RFO), when a processor tries to write to a cache line
 * Modified, the local processor has changed the cache line, implies only one who has it
 * Exclusive, only one processor is using the cache line, not modified
 * Shared, multiple processors are using the cache line, not modified
-* Invalid, the cache line is invalid (unused)
+* Invalid, the cache line is invalid, must be refetched
 * Forward, to another socket via QPI
+* All processors MUST acknowledge a message for it to be valid
 
 !SLIDE transition=blindY
 # DRAM
-.notes One transistor, one capacitor.  Reading contiguous memory is faster than random access due to how you read - you get one write combining buffer at a time from each of the memory banks, 33% slower.  240 cycles to get data from here.  E7-8870 (Westhere) can hold 4TB of RAM, E5-2600 Sandy Bridge only 1TB.
+.notes One transistor, one capacitor.  Reading contiguous memory is faster than random access due to how you read - you get one write combining buffer at a time from each of the memory banks, 33% slower.  240 cycles to get data from here.  E7-8870 (Westhere) can hold 4TB of RAM, E5-2600 Sandy Bridge "only" 1TB.
 
 * Very dense, only 2 pieces of circuitry per datum
 * DRAM "leaks" its charge, but not sooner than 64 milliseconds
@@ -293,15 +298,6 @@ github.com/jamie-allen
 * Write misses aren't so bad unless the policy is "write through"
 
 !SLIDE transition=blindY
-# Hyperthreading
-.notes Hyper threading shares all CPU resources except the register set.  Intel CPUs limit to two threads per core, allows one hyper thread to access resources (like the arithmetic logic unit) while another hyper thread is delayed, usually by memory access.  Only more efficient if the combined runtime is lower than a single thread, possible by overlapping wait times for different memory access that would ordinarily be sequential.  The only variable is the number of cache hits.  Note that the effectively shared L1d (& L2) reduce the available caches and bandwidth for each thread to 50% when executing two completely different code (questionable unless the caches are very large), inducing more cache misses, therefore hyper threading is only useful in a limited set of situations.  Can be good for debugging with SMT.  Contrast this with Bulldozer's "modules" (akin to two cores), which has dedicated schedulers and integer units for each thread in a single processer.
-
-* Great for I/O-bound applications
-* If you have lots of cache misses
-* Doesn't do much for CPU-bound applications
-* You have half of the cache resources per core
-
-!SLIDE transition=blindY
 # Programming Optimizations
 .notes Short lived data is not cheap, but variables scoped within a method running on the JVM are stack allocated and very fast.  Think about the affect of contending locking.  You've got a warmed cache with all of the data you need, and because of contention (arbitrated at the kernel level), the thread will be put to sleep and your cached data is sitting until you can gain the lock from the arbitrator.  Due to LRU, it could be evicted.  The kernel is general purpose, may decide to do some housekeeping like defragging some memory, futher polluting your cache.  When your thread finally does gain the lock, it may end up running on an entirely different core and will have to rewarm its cache.  Everything you do will be a cache miss until its warm again.  CAS is better, checking the value before you replace it with a new value.  If it's different, re-read and try again.  Happens in user space, not at the kernel, all on thread.  Algos get a lot harder, though - state machines with many more steps and complexity.  And there is still a non-negligible cost.  Remember the cycle time diffs for different cache sizes; if the workload can be tailored to the size of the last level cache, performance can be dramatically improved.  Note that for large data sets, you may have to be oblivious to caching.
 
@@ -314,8 +310,19 @@ github.com/jamie-allen
 # What about Functional Programming?
 .notes Eventually, caches have to evict.  Cache misses cost hundreds of cycles.
 
-* Have to allocate more and more space for your data structures.  
+* Have to allocate more and more space for your data structures, leads to eviction
 * When you cycle back around, you get cache misses
+* Choose immutability by default, profile to find poor performance
+* Use mutable data in targeted locations
+
+!SLIDE transition=blindY
+# Hyperthreading
+.notes Hyper threading shares all CPU resources except the register set.  Intel CPUs limit to two threads per core, allows one hyper thread to access resources (like the arithmetic logic unit) while another hyper thread is delayed, usually by memory access.  Only more efficient if the combined runtime is lower than a single thread, possible by overlapping wait times for different memory access that would ordinarily be sequential.  The only variable is the number of cache hits.  Note that the effectively shared L1d (& L2) reduce the available caches and bandwidth for each thread to 50% when executing two completely different code (questionable unless the caches are very large), inducing more cache misses, therefore hyper threading is only useful in a limited set of situations.  Can be good for debugging with SMT.  Contrast this with Bulldozer's "modules" (akin to two cores), which has dedicated schedulers and integer units for each thread in a single processer.
+
+* Great for I/O-bound applications
+* If you have lots of cache misses
+* Doesn't do much for CPU-bound applications
+* You have half of the cache resources per core
 
 !SLIDE transition=blindY
 # Data Structures
@@ -326,7 +333,7 @@ github.com/jamie-allen
 * BAD: Standard Java collections generate lots of garbage
 * GOOD: Array-based and contiguous in memory is much faster
 * GOOD: Write your own that are lock-free and contiguous
-* Fastutil library
+* GOOD: Fastutil library, but note that it's additive
 
 !SLIDE transition=blindY
 # Application Memory Wall & GC
@@ -354,9 +361,9 @@ github.com/jamie-allen
 
 !SLIDE transition=blindY
 # Memristor
-.notes from HP, due to come out this year or next, may change memory fundamentally.  If the data and the function are together, you get the highest throughput and lowest latency possible.  Could replace DRAM and disk entirely.  When current flows in one direction through the device, the electrical resistance increases; and when current flows in the opposite direction, the resistance decreases.  When the current is stopped, the component retains the last resistance that it had, and when the flow of charge starts again, the resistance of the circuit will be what it was when it was last active.
+.notes from HP, due to come out this year or next, may change memory fundamentally.  If the data and the function are together, you get the highest throughput and lowest latency possible.  Could replace DRAM and disk entirely.  When current flows in one direction through the device, the electrical resistance increases; and when current flows in the opposite direction, the resistance decreases.  When the current is stopped, the component retains the last resistance that it had, and when the flow of charge starts again, the resistance of the circuit will be what it was when it was last active.  Is write endurance good enough for anything but storage?
 
-* Non-volatile, static RAM, same write endurance as Flash (is that good enough for anything but storage?)
+* Non-volatile, static RAM, same write endurance as Flash
 * 200-300 MB on chip
 * Sub-nanosecond writes
 * Able to perform processing
