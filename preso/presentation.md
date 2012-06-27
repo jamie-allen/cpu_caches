@@ -400,4 +400,5 @@ github.com/jamie-allen
 * [Martin Thompson's Mechanical Sympathy blog and Disruptor presentations](http://mechanical-sympathy.blogspot.com/)
 * [Gil Tene, CTO of Azul Systems](http://www.azulsystems.com/presentations/application-memory-wall)
 * [AMD Bulldozer/Intel Sandy Bridge Comparison by Gionatan Danti](http://www.ilsistemista.net/index.php/hardware-analysis/24-bulldozer-vs-sandy-bridge-vs-k10-comparison-whats-wrong-with-amd-bulldozer.html)
+* [SI Software's Benchmarks](http://www.sisoftware.net/?d=qa&f=ben_mem_latency)
 * Martin Thompson and Cliff Click provided feedback and additional content
