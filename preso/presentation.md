@@ -12,8 +12,6 @@ github.com/jamie-allen
 
 <img src="typesafe-logo-081111.png" class="illustration" note="final slash needed"/>
 
-
-
 !SLIDE transition=blindY
 # Why?
 
@@ -21,12 +19,14 @@ github.com/jamie-allen
 	* Runtime (JVM, RVM)
 	* Platforms/Environments (cloud)
 * Disruptor, 2011
+	* http://code.google.com/p/disruptor/
 
 !SLIDE transition=blindY
 # Symmetric Multiprocessor (SMP) Architecture
 .notes New machines today are SMP, a multiprocessor architecture where two or more identical processors are connected to a single shared main memory and controlled by a single OS instance.  Since Intel's Nehalem architecture, each CPU socket controls a portion of RAM, and no other socket has access to it directly.  2011 Sandy Bridge and AMD Fusion integrated Northbridge functions into CPUs, along with processor cores, memory controller and graphics processing unit.  So components are closer together today than depicted in this picture.
 
 * Symmetric Multiprocessor
+* Processor/Socket versus Core
 * No more Northbridge
 
 <img src="smp.png" class="illustration" note="final slash needed"/>
@@ -50,26 +50,27 @@ github.com/jamie-allen
 
 !SLIDE transition=blindY
 # Cache Lines
-.notes A dirty cache line is not present in any other processor's cache; clean copies of the same cache line can reside in arbitrarily many caches. A cache line that has been modified has a dirty flag set to true, set to false when sent to main memory.  Be careful about what's on them, because if a line holds multiple variables and the state of one changes, coherency must be maintained.  Kills performance for parallel threads on an SMP machine.  Memory data is transferred to caches in 64 bit blocks, while a cache line is typically 64 bytes, therefore 8 transfers per cache line.  The blocks of a line arrive at different times, ~every 4 CPU cycles.  If the word in the line required is in the last block, that's about 30 cycles or more after the first word arrives.  However, the memory controller is free to request the blocks in a different order.  The processor can specify the "critical word",  and the block that word resides in can be retrieved first for the cache line by the memory controller.  The program has the data it needs and can continue while the rest of the line is retrieved and the cache is not yet in a consistent state, called "Critical Word First & Early Restart". Note that with pre-fetching, the critical word is not known - if the processor request the cache line while the pre-fetching is in transit, it will not be able to influence the block ordering and will hav to wait until the critical word arrives in order.  Position in the cache line matters, faster to be at the front than the rear.
+.notes A dirty cache line is not present in any other processor's cache; clean copies of the same cache line can reside in arbitrarily many caches. A cache line that has been modified has a dirty flag set to true, set to false when sent to main memory.  Be careful about what's on them, because if a line holds multiple variables and the state of one changes, coherency must be maintained.  Kills performance for parallel threads on an SMP machine.  Memory data is transferred to caches in 64 bit blocks, while a cache line is typically 64 bytes, therefore 8 transfers per cache line.  The blocks of a line arrive at different times, ~every 4 CPU cycles.  If the word in the line required is in the last block, that's about 30 cycles or more after the first word arrives.  However, the memory controller is free to request the blocks in a different order.  The processor can specify the "critical word",  and the block that word resides in can be retrieved first for the cache line by the memory controller.  The program has the data it needs and can continue while the rest of the line is retrieved and the cache is not yet in a consistent state, called "Critical Word First & Early Restart". Note that with pre-fetching, the critical word is not known - if the processor request the cache line while the pre-fetching is in transit, it will not be able to influence the block ordering and will have to wait until the critical word arrives in order.  Position in the cache line matters, faster to be at the front than the rear.
 
-* Most commonly 64 contiguous bytes, can be 32-256.  
+* Most commonly 64 contiguous bytes, can be 32-256
 * Look out for false sharing
 * Padding can be used to ensure unshared line
-* Position in the line matters, but not if pre-fetched
+* Transferred in 64-bit blocks (8x for 64 byte lines), arriving every ~4 cycles
+* Position in the line of the "critical word" matters, but not if pre-fetched
 * @Contended annotation coming to JVM?
 
 !SLIDE transition=blindY
 # Cache Write Strategies
 .notes Write through caching: immediately write to main memory after cache line changed. Slow, but predictable.  Lots of FSB traffic.  Write back caching: mark flag bit as dirty, when evicted the processor notes and sends cache line back to main memory, instead of just dropping it; have to be careful of false sharing and cache coherency.  Write combining caching: used by graphics cards, groups writes to main memory for speed.  Uncachable: dynamic memory values that can change without warning.  Used for commodity hardware.
 
-* Write through - change goes back to main memory
-* Write back - marked when dirty, eviction sends back to main memory
-* Write combining - grouped writes back to main memory
+* Write through - changed line immediately goes back to main memory
+* Write back - line is marked when dirty, eviction sends back to main memory
+* Write combining - grouped writes of cache lines back to main memory
 * Uncachable - dynamic values that can change without warning
 
 !SLIDE transition=blindY
 # Current Processors
-.notes Westmere was the 32nm die shrink of Nehalem.  Ivy Bridge uses 22nm.  I'm ignoring Oracle SPARC here, but note that Oracle is supposedly building a 16K core UltraSPARC 64.  Current Intel top of the line is Xeon E7-8870 (80 cores, 32MB L3, 4TB RAM), but it's a Westmere-based microarchitecture.  The E5-2600 Romley is the top shelf new Sandy Bridge offering - it's specs don't sound as mighty (8 cores per socket, max 30MB L3, 1TB RAM).  Don't be fooled, the Direct Data IO makes up for it as disks network cards can do DMA (Direct Memory Access) from L3, not RAM.  Also has two memory read ports, whereas previous architectures only had one and were a bottleneck for math-intensive applications.  Sandy Bridge is 4-30MB (8MB is currently max for mobile platforms, even with Ivy Bridge), includes the processor graphics.  Sandy/Ivy Bridge and Bulldozer support the new AVX (Advanced Vector Extensions) instruction set of x86.
+.notes Westmere was the 32nm die shrink of Nehalem.  Ivy Bridge uses 22nm.  I'm ignoring Oracle SPARC here, but note that Oracle is supposedly building a 16K core UltraSPARC 64.  Current Intel top of the line is Xeon E7-8870 (8 cores, 32MB L3, 4TB RAM), but it's a Westmere-based microarchitecture.  The E5-2600 Romley is the top shelf new Sandy Bridge offering - it's specs don't sound as mighty (8 cores per socket, max 30MB L3, 1TB RAM).  Don't be fooled, the Direct Data IO makes up for it as disks network cards can do DMA (Direct Memory Access) from L3, not RAM, decreasing latency by ~18%.  Also has two memory read ports, whereas previous architectures only had one and were a bottleneck for math-intensive applications.  Sandy Bridge is 4-30MB (8MB is currently max for mobile platforms, even with Ivy Bridge), includes the processor graphics.  Sandy/Ivy Bridge and Bulldozer support the new AVX (Advanced Vector Extensions) instruction set of x86.
 
 * Intel
 	* Nehalem/Westmere
@@ -87,6 +88,7 @@ github.com/jamie-allen
 
 !SLIDE transition=blindY
 # CPU Caches
+.notes Not to scale, not representative of the correct number of registers.
 
 <img src="all_caches.png" class="illustration" note="final slash needed"/>
 
@@ -97,6 +99,14 @@ github.com/jamie-allen
 * The most critical factor in performance
 * Spatial - reused over and over in a loop, data accessed in small regions
 * Temporal - high probability it will be reused before long
+
+!SLIDE transition=blindY
+# CPU or Instruction Cycle 
+
+* aka Fetch and Execute Cycle
+* aka Fetch-Decode-Execute Cycle (FDX)
+* Retrieve instruction from memory, determine actions required and carry them out
+* Equates to roughly 1/3 of a nanosecond
 
 !SLIDE transition=blindY
 # Latency Numbers Everyone Should Know
@@ -120,26 +130,30 @@ github.com/jamie-allen
 	Shamelessly cribbed from this gist: https://gist.github.com/2843375
 
 !SLIDE transition=blindY
-# CPU or Instruction Cycle 
-.notes Sometimes called the fetch and execute cycle, or fetch-decode-execute cycle, or FDX.  Process by which a computer retrieves a program instruction from memory, determines what actions the instructions require, and carries out those actions.
+# Measured Cache Latencies
+.notes Sandy Bridge has 2 load/store operations for each memory channel
 
-* Basic operation cycle of a computer
-* Equates to roughly 1/3 of a nanosecond
-* Sandy Bridge has 2 load/store operations for each memory channel
+	Sandy Bridge-E			  L1d			L2			L3		  Main
+							===========================================
+	Sequential Access .....  3 clk        11 clk      14 clk        6ns
+	Full Random Access ....  3 clk        11 clk      38 clk     65.8ns
+
+	SI Software's benchmarks: http://www.sisoftware.net/?d=qa&f=ben_mem_latency
 
 !SLIDE transition=blindY
 # Registers
-.notes Sandy Bridge has 168 Integer/FP
+.notes Types of registers include instruction, data (floating point, integer, chars, small bit arrays, etc), address, conditional, constant, etc.
 
-* On-core
+* On-core for instructions being executed
 * Can be accessed in a single cycle
-* A 64-bit Intel Nehalem CPU had 128 Integer registers, 128 floating point registers
+* There are many different types
+* A 64-bit Intel Nehalem CPU had 128 Integer & 128 floating point registers
 
 !SLIDE transition=blindY
 # Load/Store Buffers
 .notes Store buffers disambiguate memory access and manage dependencies for instructions (loads and stores) occurring out of program order. CPUs typically have load and store buffers which are associative queues of separate load and store instructions that are outstanding.
 
-* Important for Out of Order (OoO) execution
+* Important for holding instructions for Out of Order (OoO) execution
 * Can be snooped by other cores to preserve program order
 * ~1 cycle
 
@@ -165,17 +179,18 @@ github.com/jamie-allen
 # L0
 .notes Macro ops have to be decoded into micro ops to be handled by the CPU.  Nehalem used L1 for macro ops decoding and had a copy of every operand required, but Sandy Bridge caches the uops (Micro-operations), boosting performance in tight code (small, highly profiled and optimized, can be secure, testable, easy to migrate).  Not the same as the older "trace" cache, which stored uops in the order in which they were executed, which meant lots of potential duplication.  No duplication in the L0, storing only unique decode instructions.  Hot loops are those where the program spends the majority of its time.  Theoretical size of 1.5Kuops, effective utilization possibly much lower.  Hot loops should be sized to fit here.
 
+* New to Sandy Bridge
 * A decoded cache of the last 1536 uops (~6kB)
-* Well-suited for hot inner loops
-* The CPU can put the L1 and decoder to "sleep" to save energy and minimize heat.
+* Well-suited for hot loops
+* Not the same as a "trace" cache
 
 !SLIDE transition=blindY
 # L1
-.notes Instructions are generated by the compiler, which knows rules for good code generation.  Code has predictable patterns and CPUs are good at recognizing them, which helps pre-fetching.  Spatial and temporal locality is good.  Nehalem could load 128 bits per cycle, but Sandy Bridge can load double that because load and store address units can be interchanged - thus using 2 128-bit units per cycle instead of one.  Write through to L2 used by Bulldozer (AMD)
+.notes Instructions are generated by the compiler, which knows rules for good code generation.  Code has predictable patterns and CPUs are good at recognizing them, which helps pre-fetching.  Spatial and temporal locality is good.  Nehalem could load 128 bits per cycle, but Sandy Bridge can load double that because load and store address units can be interchanged - thus using 2 128-bit units per cycle instead of one.
 
 * Divided into data and instructions
 * 32K data, 32K instructions per core on a Sandy Bridge
-* 16KB data per cluster, 64KB instruction per core
+* Sandy Bridge loads data at 256 bits per cycle, double that of Nehalem
 * 3-4 cycles to get to L1d
 * Bulldozer uses "write through" back to L2
 
