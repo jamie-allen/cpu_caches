@@ -143,7 +143,7 @@ github.com/jamie-allen
 # Registers
 .notes Types of registers include instruction, data (floating point, integer, chars, small bit arrays, etc), address, conditional, constant, etc.
 
-* On-core for instructions being executed
+* On-core for instructions being executed and their operands
 * Can be accessed in a single cycle
 * There are many different types
 * A 64-bit Intel Nehalem CPU had 128 Integer & 128 floating point registers
@@ -166,7 +166,7 @@ github.com/jamie-allen
 * Direct Mapped: Each entry can only go in one specific place 
 
 !SLIDE transition=blindY
-# SRAM
+# Static RAM (SRAM)
 .notes The number of circuits per datum means that SRAM can never be dense.
 
 * Requires 6-8 pieces of circuitry per datum, cannot be dense
@@ -191,7 +191,6 @@ github.com/jamie-allen
 * 32K data, 32K instructions per core on a Sandy Bridge
 * Sandy Bridge loads data at 256 bits per cycle, double that of Nehalem
 * 3-4 cycles to get to L1d
-* Bulldozer uses "write through" back to L2
 
 !SLIDE transition=blindY
 # L2
@@ -199,7 +198,7 @@ github.com/jamie-allen
 
 * 256K per core on a Sandy Bridge
 * 2MB per "module" on AMD's Bulldozer architecture
-* 14 cycles to reach
+* 11 cycles to reach
 * Unified data and instruction caches from here up
 * If the working set size is larger than L2, misses grow
 
@@ -212,6 +211,7 @@ github.com/jamie-allen
 * Where concurrency takes place
 * Since no longer unified, any core could access data from any of the LLCs (until Sandy Bridge)
 * Varies in size with different processors and versions of an architecture
+* 14-38 cycles to reach
 
 !SLIDE transition=blindY
 # Exclusive versus Inclusive
@@ -221,6 +221,7 @@ github.com/jamie-allen
 * AMD is exclusive
 	* Progressively more costly due to eviction
 	* Can hold more data
+	* Bulldozer uses "write through" from L1d back to L2
 * Intel is inclusive
 	* Can be better for inter-processor memory sharing
 
@@ -260,7 +261,7 @@ github.com/jamie-allen
 * All processors MUST acknowledge a message for it to be valid
 
 !SLIDE transition=blindY
-# DRAM
+# Dynamic RAM (DRAM)
 .notes One transistor, one capacitor.  Reading contiguous memory is faster than random access due to how you read - you get one write combining buffer at a time from each of the memory banks, 33% slower.  240 cycles to get data from here.  E7-8870 (Westhere) can hold 4TB of RAM, E5-2600 Sandy Bridge "only" 1TB.
 
 * Very dense, only 2 pieces of circuitry per datum
@@ -303,8 +304,9 @@ github.com/jamie-allen
 
 * Stack allocated data is cheap
 * Pointer interaction - you have to retrieve data being pointed to, even in registers
-* Avoid locking
-* Match workload to the size of the last level cache
+* Avoid locking and resultant kernel arbitration
+* CAS is better and all on-thread, but algorithms become more complex
+* Match workload to the size of the last level cache (LLC, L3)
 
 !SLIDE transition=blindY
 # What about Functional Programming?
@@ -326,7 +328,7 @@ github.com/jamie-allen
 
 !SLIDE transition=blindY
 # Data Structures
-.notes  If n is not very large, an array will beat it for performance.  LL and trees have pointer chasing which are bad for striding across 2K cache pre-fetching.  Java's hashmap uses chained buckets, where each hash's bucket is a linked list.  Clojure/Scala vectors are good, because they have groupings of contiguous memory in use, but do not require all data to be contiguous like Java's ArrayList.  Fastutil is additive, no removal, but that's not necessarily a bad thing with proper tombstoning and data cleanup.
+.notes  If n is not very large, an array will beat it for performance.  Linked lists and trees have pointer chasing which are bad for striding across 2K cache pre-fetching.  Java's hashmap uses chained buckets, where each hash's bucket is a linked list.  Clojure/Scala vectors are good, because they have groupings of contiguous memory in use, but do not require all data to be contiguous like Java's ArrayList.  Fastutil is additive, no removal, but that's not necessarily a bad thing with proper tombstoning and data cleanup.
 
 * BAD: Linked list structures and tree structures
 * BAD: Java's HashMap uses chained buckets!
@@ -337,11 +339,13 @@ github.com/jamie-allen
 
 !SLIDE transition=blindY
 # Application Memory Wall & GC
-.notes We can have as much RAM/heap space as we want now.  And requirements for RAM grow at about 100x per decade.  But are we now bound by GC?  You can get 100GB of heap, but how long do you pause for marking/remarking phases and compaction?  Even on a 2-4 GB heap, you're going to get multi-second pauses - when and how often?  IBM Metronome collector is very predictable. Azul around one millisecond for phenomenal amounts of garbage with C4.
+.notes We can have as much RAM/heap space as we want now.  And requirements for RAM grow at about 100x per decade.  But are we now bound by GC?  You can get 100GB of heap, but how long do you pause for marking/remarking phases and compaction?  Even on a 2-4 GB heap, you're going to get multi-second pauses - when and how often?  IBM Metronome collector is very predictable. Azul around one millisecond for lots of garbage with C4.
 
 * Tremendous amounts of RAM at low cost
-* But is GC the real cause?
+* GC will kill you with compaction
 * Use pauseless GC
+	* IBM's Metronome, very predictable
+	* Azul's C4, very performant
 
 !SLIDE transition=blindY
 # Using GPUs
