@@ -150,7 +150,7 @@ github.com/jamie-allen
 
 !SLIDE transition=blindY
 # Load/Store Buffers
-.notes Store buffers disambiguate memory access and manage dependencies for instructions (loads and stores) occurring out of program order. CPUs typically have load and store buffers which are associative queues of separate load and store instructions that are outstanding.
+.notes Store buffers disambiguate memory access and manage dependencies for instructions (loads and stores) occurring out of program order. CPUs typically have load and store buffers which are associative queues of separate load and store instructions that are outstanding.  Store buffer writes are still part of cache coherency, they just don't publish the value to L1 right away.  The point of the store buffer is that if CPU 1 needs to write to cache line A but doesn't have the line in its L1 (let's not forget that a write has to do a load as well), it can drop the write in the store buffer while cache controller fetches it - this is to avoid a stall.  If line is already in L1 it can store directly to it (and bypass store buffer), possibly causing invalidate requests to be sent out.
 
 * Important for holding instructions for Out of Order (OoO) execution
 * Can be snooped by other cores to preserve program order
@@ -328,7 +328,7 @@ github.com/jamie-allen
 
 !SLIDE transition=blindY
 # Data Structures
-.notes  If n is not very large, an array will beat it for performance.  Linked lists and trees have pointer chasing which are bad for striding across 2K cache pre-fetching.  Java's hashmap uses chained buckets, where each hash's bucket is a linked list.  Clojure/Scala vectors are good, because they have groupings of contiguous memory in use, but do not require all data to be contiguous like Java's ArrayList.  Fastutil is additive, no removal, but that's not necessarily a bad thing with proper tombstoning and data cleanup.
+.notes If n is not very large, an array will beat it for performance.  Linked lists and trees have pointer chasing which are bad for striding across 2K cache pre-fetching.  Java's hashmap uses chained buckets, where each hash's bucket is a linked list.  Clojure/Scala vectors are good, because they have groupings of contiguous memory in use, but do not require all data to be contiguous like Java's ArrayList.  Fastutil is additive, no removal, but that's not necessarily a bad thing with proper tombstoning and data cleanup.
 
 * BAD: Linked list structures and tree structures
 * BAD: Java's HashMap uses chained buckets!
